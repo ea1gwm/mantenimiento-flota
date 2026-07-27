@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mantenimiento de flota</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Flota">
+<meta name="theme-color" content="#f7f6f4">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="flota-icon.svg" type="image/svg+xml">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: oklch(0.98 0.004 80); color: oklch(0.22 0.01 80);
+         font-family: -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
+  input, textarea, button { font-family: inherit; }
+  ::placeholder { color: oklch(0.6 0.01 80); }
+
+  .wrap { min-height: 100vh; padding: 24px 20px 60px; max-width: 1400px; margin: 0 auto; }
+  .head { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .h1 { font-size:26px; font-weight:700; letter-spacing:-0.01em; }
+  .sub { font-size:14px; color:oklch(0.5 0.01 80); margin-top:2px; }
+  .ver { font-size:11px; color:oklch(0.62 0.01 80); }
+
+  .tabs { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:24px; }
+  .tab { padding:9px 16px; border-radius:8px; border:1px solid oklch(0.88 0.01 80); background:white;
+         color:oklch(0.3 0.01 80); font-size:14px; font-weight:500; cursor:pointer; }
+  .tab.on { border-color:oklch(0.5 0.14 230); background:oklch(0.5 0.14 230); color:white; font-weight:600; }
+  .tab-add { padding:9px 14px; border-radius:8px; border:1px dashed oklch(0.75 0.01 80);
+             background:transparent; color:oklch(0.45 0.01 80); font-size:14px; cursor:pointer; }
+
+  .cols { display:grid; grid-template-columns:380px 1fr; gap:24px; align-items:start; }
+  .col { display:flex; flex-direction:column; gap:20px; }
+  .card { background:white; border:1px solid oklch(0.92 0.008 80); border-radius:14px; padding:20px; }
+  /* sin esto, el contenido ancho (barras, historial) estira la pista del grid
+     y aparece scroll horizontal en el móvil */
+  .cols > *, .col > *, .charts2 > * { min-width: 0; }
+  .card-t { font-size:15px; font-weight:700; }
+  .card-s { font-size:12px; color:oklch(0.5 0.01 80); margin-bottom:10px; }
+
+  .field { display:flex; flex-direction:column; gap:4px; font-size:12px;
+           color:oklch(0.5 0.01 80); font-weight:600; }
+  .field input, .field textarea { padding:9px 10px; border-radius:8px;
+           border:1px solid oklch(0.85 0.01 80); font-size:14px; color:inherit; background:white; }
+  .field textarea { resize:vertical; }
+  .hint { font-weight:400; text-transform:none; color:oklch(0.6 0.01 80); }
+  .form { display:flex; flex-direction:column; gap:10px; }
+  .check { display:flex; align-items:center; gap:8px; font-size:13px;
+           color:oklch(0.35 0.01 80); padding:4px 0; font-weight:400; }
+  .check input { width:16px; height:16px; }
+  .primary { padding:11px; border-radius:8px; border:none; background:oklch(0.5 0.14 230);
+             color:white; font-size:14px; font-weight:600; cursor:pointer; }
+  .ghost { padding:9px 14px; border-radius:8px; border:1px solid oklch(0.85 0.01 80);
+           background:white; color:oklch(0.4 0.01 80); font-size:14px; cursor:pointer; }
+  .err { font-size:12px; color:oklch(0.55 0.18 30); }
+
+  .kpis { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .kpi { background:white; border:1px solid oklch(0.92 0.008 80); border-radius:14px; padding:16px; }
+  .kpi-l { font-size:11px; font-weight:600; color:oklch(0.5 0.01 80);
+           text-transform:uppercase; letter-spacing:0.03em; }
+  .kpi-v { font-size:26px; font-weight:700; margin-top:4px; }
+  .kpi-v.sm { font-size:16px; line-height:1.3; }
+  .kpi.blue { background:oklch(0.95 0.03 230); border-color:oklch(0.85 0.05 230); }
+  .kpi.blue .kpi-l { color:oklch(0.4 0.08 230); }
+  .kpi.blue .kpi-v { color:oklch(0.3 0.1 230); }
+
+  .oil { background:oklch(0.95 0.03 230); border:1px solid oklch(0.85 0.05 230);
+         border-radius:14px; padding:18px 20px; }
+  .oil-l { font-size:11px; font-weight:600; color:oklch(0.4 0.08 230);
+           text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
+  .oil-row { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  .oil-txt { font-size:15px; color:oklch(0.3 0.1 230); }
+  .oil-cur { display:flex; align-items:center; gap:8px; font-size:13px; color:oklch(0.3 0.1 230); }
+  .oil-cur input { padding:7px 10px; border-radius:7px; border:1px solid oklch(0.75 0.06 230);
+                   font-size:13px; width:110px; background:white; color:inherit; }
+  .oil-rem { font-size:16px; font-weight:700; margin-top:8px; color:oklch(0.3 0.1 230); }
+  .oil-rem.late { color:oklch(0.5 0.18 30); }
+
+  .hist { max-height:420px; overflow-y:auto; display:flex; flex-direction:column; }
+  .row { display:flex; flex-direction:column; gap:4px; padding:12px 0;
+         border-bottom:1px solid oklch(0.93 0.008 80); }
+  .row-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .row-date { font-size:13px; font-weight:700; color:oklch(0.5 0.14 230); }
+  .row-km { font-size:12px; color:oklch(0.5 0.01 80); }
+  .row-km.unk { font-style:italic; color:oklch(0.62 0.01 80); }
+  .row-taller { font-size:12px; color:oklch(0.45 0.01 80); font-weight:600; }
+  .row-bot { display:flex; justify-content:space-between; align-items:flex-end; gap:8px; }
+  .row-rep { font-size:13px; color:oklch(0.3 0.01 80); flex:1; }
+  .row-del { flex-shrink:0; border:none; background:transparent; color:oklch(0.6 0.02 80);
+             font-size:12px; cursor:pointer; padding:2px 4px; }
+  .empty { padding:24px 0; font-size:13px; color:oklch(0.6 0.01 80); text-align:center; }
+
+  .charts2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .bars { display:flex; align-items:flex-end; gap:6px; height:150px; overflow-x:auto; }
+  .bar { display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; width:34px; }
+  .bar-v { font-size:10px; color:oklch(0.45 0.01 80); }
+  .bar-b { width:18px; background:oklch(0.7 0.1 230); border-radius:3px 3px 0 0; }
+  .bar-l { font-size:9px; color:oklch(0.55 0.01 80); }
+  .ybars { display:flex; align-items:flex-end; gap:10px; height:150px; }
+  .ybar { display:flex; flex-direction:column; align-items:center; gap:4px; flex:1; }
+  .ybar-v { font-size:11px; color:oklch(0.45 0.01 80); font-weight:600; }
+  .ybar-b { width:100%; max-width:40px; background:oklch(0.6 0.13 50); border-radius:3px 3px 0 0; }
+  .ybar-l { font-size:10px; color:oklch(0.55 0.01 80); }
+  .cats { display:flex; flex-direction:column; gap:10px; }
+  .cat { display:flex; align-items:center; gap:10px; }
+  .cat-n { width:150px; font-size:13px; color:oklch(0.3 0.01 80); flex-shrink:0; }
+  .cat-t { flex:1; background:oklch(0.95 0.005 80); border-radius:5px; height:16px; overflow:hidden; }
+  .cat-f { height:100%; background:oklch(0.55 0.12 230); border-radius:5px; }
+  .cat-c { width:28px; font-size:12px; color:oklch(0.5 0.01 80); text-align:right; flex-shrink:0; }
+
+  .hide { display:none !important; }
+
+  @media (max-width: 900px) {
+    .wrap { padding:20px 14px 48px; }
+    .cols { grid-template-columns:1fr; gap:20px; }
+    .charts2 { grid-template-columns:1fr; }
+    .cat-n { width:110px; font-size:12px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div>
+      <div class="h1">Mantenimiento de flota</div>
+      <div class="sub">Registro de revisiones y evolución por vehículo</div>
+    </div>
+    <div class="ver" id="ver"></div>
+  </div>
+
+  <div class="tabs">
+    <div id="tabs" style="display:contents"></div>
+    <button class="tab-add" id="btnAddVehicle">+ Añadir vehículo</button>
+    <input id="newPlate" class="hide" placeholder="Matrícula"
+           style="padding:8px 12px; border-radius:8px; border:1px solid oklch(0.8 0.01 80); font-size:14px; width:140px;">
+    <button class="primary hide" id="btnConfirmVehicle" style="padding:9px 14px;">Añadir</button>
+    <button class="ghost hide" id="btnCancelVehicle">Cancelar</button>
+  </div>
+
+  <div class="cols">
+
+    <!-- ================= columna izquierda ================= -->
+    <div class="col">
+
+      <div class="card">
+        <div class="card-t" style="margin-bottom:14px;">Registrar revisión</div>
+        <div class="form">
+          <label class="field">FECHA
+            <input type="date" id="fDate">
+          </label>
+          <label class="field">TALLER
+            <input id="fTaller" placeholder="Nombre del taller">
+          </label>
+          <label class="field">KM <span class="hint">— déjalo vacío si no los sabes</span>
+            <input type="number" id="fKm" placeholder="Sin datos" min="0">
+          </label>
+          <label class="field">REPARACIÓN
+            <textarea id="fRep" rows="3" placeholder="Descripción de la reparación"></textarea>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="fOil">
+            Es un cambio de aceite
+          </label>
+          <label class="field hide" id="fOilIntervalWrap">VÁLIDO HASTA (KM DE DURACIÓN)
+            <input type="number" id="fOilInterval" placeholder="20000" value="20000" min="0">
+          </label>
+          <button class="primary" id="btnAdd" style="margin-top:4px;">Añadir registro</button>
+          <div class="err hide" id="formErr"></div>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi-l">Registros</div>
+          <div class="kpi-v" id="kTotal">0</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-l">Último KM</div>
+          <div class="kpi-v" id="kLastKm">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-l">Taller habitual</div>
+          <div class="kpi-v sm" id="kTaller">—</div>
+        </div>
+        <div class="kpi blue">
+          <div class="kpi-l">Próxima revisión est.</div>
+          <div class="kpi-v sm" id="kNext">—</div>
+        </div>
+      </div>
+
+      <div class="oil hide" id="oilCard">
+        <div class="oil-l">Cambio de aceite</div>
+        <div class="oil-row">
+          <div class="oil-txt" id="oilTxt"></div>
+          <label class="oil-cur">
+            Km actuales
+            <input type="number" id="oilCur" min="0">
+          </label>
+        </div>
+        <div class="oil-rem" id="oilRem"></div>
+      </div>
+
+      <div class="card" style="padding-bottom:8px;">
+        <div class="card-t" style="margin-bottom:12px;">Historial (<span id="histPlate"></span>)</div>
+        <div class="hist" id="hist"></div>
+      </div>
+
+    </div>
+
+    <!-- ================= columna derecha ================= -->
+    <div class="col">
+
+      <div class="card">
+        <div class="card-t">Evolución del kilometraje</div>
+        <div class="card-s">Km acumulados a lo largo del tiempo<span id="lineNote"></span></div>
+        <svg width="100%" height="220" viewBox="0 0 680 220" id="lineChart">
+          <line x1="40" y1="180" x2="660" y2="180" stroke="oklch(0.88 0.01 80)" stroke-width="1"></line>
+          <line x1="40" y1="20" x2="40" y2="180" stroke="oklch(0.88 0.01 80)" stroke-width="1"></line>
+          <polyline id="lcLine" points="" fill="none" stroke="oklch(0.5 0.14 230)" stroke-width="2.5"></polyline>
+          <g id="lcDots"></g>
+          <text x="40" y="14" font-size="11" fill="oklch(0.5 0.01 80)" id="lcMaxKm"></text>
+          <text x="40" y="196" font-size="11" fill="oklch(0.5 0.01 80)" id="lcMinDate"></text>
+          <text x="620" y="196" font-size="11" fill="oklch(0.5 0.01 80)" text-anchor="end" id="lcMaxDate"></text>
+        </svg>
+      </div>
+
+      <div class="charts2">
+        <div class="card">
+          <div class="card-t">Km entre revisiones</div>
+          <div class="card-s" style="margin-bottom:14px;">Distancia recorrida entre citas</div>
+          <div class="bars" id="intervalBars"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-t">Reparaciones por año</div>
+          <div class="card-s" style="margin-bottom:14px;">Nº de visitas al taller</div>
+          <div class="ybars" id="yearBars"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-t" style="margin-bottom:14px;">Tipos de reparación</div>
+        <div class="cats" id="catBars"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const APP_VERSION = 'v1.0.0';
+const STORAGE_KEY = 'mantenimiento_flota_app';
+
+/* ---------- datos iniciales ----------
+   [fecha, taller, km (null = desconocido), reparación, intervalo aceite] */
+const RAW_SEED = [
+  ["2022-06-03","Talleres Ramos Naron",13794,"Cambio de aceite.",20000],
+  ["2022-09-13","Talleres Rodosa Vigo",21321,"Chivato antipolución.",null],
+  ["2023-01-09","Talleres Rodi Coruña",29025,"Cambio ruedas delanteras.",null],
+  ["2023-01-31","Talleres Caeiro Coruña",31870,"Cambio de aceite y filtros, revisión.",20000],
+  ["2023-03-22","Talleres Ramos Naron",36630,"Cambio pastillas delanteras.",null],
+  ["2023-03-27","Talleres Ramos Naron",37028,"Cambio pastillas traseras y escobillas.",null],
+  ["2023-04-21","Talleres Rodi Coruña",null,"Pinchazo rueda trasera derecha.",null],
+  ["2023-09-19","Talleres Ramos Naron",52323,"Cambio aceite y filtro, filtro gasoil.",20000],
+  ["2024-02-14","Talleres Ramos Naron",67786,"Cambio pastillas delanteras,aceite y filtro.",20000],
+  ["2024-03-08","Talleres Ramos Naron",71443,"Cambio pastillas traseras y Batería",null],
+  ["2024-05-14","Talleres Rodi Naron",80775,"Cambio ruedas delanteras.",null],
+  ["2024-07-22","Talleres Rodi Naron",93527,"Cambio aceite ( 20.000km) y todos los filtros",20000],
+  ["2024-09-13","Taller Caeiro Coruña",99132,"Cambio deposito de Adblue",null],
+  ["2025-01-23","Talleres Rodri Naron",111793,"Cambio pastillas delanteras y aceite con filtro ( 20.000 km )",20000],
+  ["2025-04-25","Talleres Rodri Naron",120420,"Cambio Pastillas Traseras  ( Mal cable de chivato )",null],
+  ["2025-06-13","Talleres Rodri Coruña",125306,"Cambio Pastillas, traseras y delanteras. Cambio de las 4 Cubiertas",null],
+  ["2025-07-15","Talleres Nissan Antamotor",128807,"Reparción Puerta trasera.",null],
+  ["2025-07-24","Talleres Rodri Coruña",128880,"Cambio de aceite y filtro. ( 20.000Km ) Hacen puente en pastillas traseras",20000],
+  ["2025-08-22","Talleres Rodri Naron",131693,"Pinchazo rueda trasera izquierda.",null],
+  ["2025-12-22","Talleres Rodri Naron",152800,"Cambio correa alternador, dejan sin agua el vehículo.",null],
+  ["2026-05-07","Talleres Soledad Naron ( Rio do Pozo )",171595,"Cambio de aceite y filtros.Pastilla traseras. Cambian el espejo derecho",20000],
+  ["2026-05-21","Talleres Soledad Naron ( Rio do Pozo )",172957,"Cambio de las ruedas delanteras.",null],
+  ["2026-07-24","Talleres Soledad Naron ( Rio do Pozo )",185992,"Cambio de las ruedas traseras",null]
+];
+
+function seedVehicles() {
+  return [{
+    id: 'v1',
+    plate: '8254LSP',
+    records: RAW_SEED.map((r, i) => ({
+      id: 's' + i, date: r[0], taller: r[1], km: normKm(r[2]),
+      reparacion: r[3], oilIntervalKm: r[4] || null
+    }))
+  }];
+}
+
+/* km desconocido = null. El 0 se trata como desconocido: un vehículo
+   con 0 km no va al taller, así que siempre es un dato que falta. */
+function normKm(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseInt(v, 10);
+  return (isNaN(n) || n <= 0) ? null : n;
+}
+function hasKm(r) { return r.km !== null && r.km !== undefined; }
+
+function loadVehicles() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) {
+        return parsed.map(v => ({
+          ...v,
+          records: (v.records || []).map(r => ({ ...r, km: normKm(r.km) }))
+        }));
+      }
+    }
+  } catch (e) {}
+  return seedVehicles();
+}
+
+function categorize(text) {
+  const t = (text || '').toLowerCase();
+  if (t.includes('aceite') || t.includes('filtro')) return 'Aceite y filtros';
+  if (t.includes('pastilla') || t.includes('freno')) return 'Frenos';
+  if (t.includes('rueda') || t.includes('cubiert') || t.includes('pinchazo') || t.includes('neumát')) return 'Ruedas y neumáticos';
+  if (t.includes('bateria') || t.includes('batería') || t.includes('chivato') || t.includes('espejo')) return 'Eléctrico';
+  if (t.includes('correa')) return 'Correas';
+  return 'Otros';
+}
+
+const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function fmtDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return d + '/' + m + '/' + y;
+}
+function fmtDateShort(iso) {
+  const [y, m, d] = iso.split('-');
+  return d + ' ' + MONTHS[parseInt(m, 10) - 1] + ' ' + y.slice(2);
+}
+function fmtNum(n) { return Number(n || 0).toLocaleString('es-ES'); }
+function days(a, b) { return (new Date(b) - new Date(a)) / 86400000; }
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+const $ = id => document.getElementById(id);
+
+/* ---------- estado ---------- */
+let vehicles = loadVehicles();
+let selectedId = vehicles.length ? vehicles[0].id : null;
+let addingVehicle = false;
+let currentKmInputs = {};
+
+function persist() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles)); } catch (e) {}
+}
+function currentVehicle() {
+  return vehicles.find(v => v.id === selectedId) || vehicles[0] || { id: null, plate: '', records: [] };
+}
+function sortedRecords() {
+  return [...currentVehicle().records].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/* ---------- pestañas de vehículo ---------- */
+function renderTabs() {
+  const cur = currentVehicle();
+  $('tabs').innerHTML = vehicles.map(v =>
+    `<button class="tab${v.id === cur.id ? ' on' : ''}" data-id="${esc(v.id)}">${esc(v.plate)}</button>`
+  ).join('');
+  $('tabs').querySelectorAll('.tab').forEach(b => {
+    b.onclick = () => { selectedId = b.dataset.id; setAddingVehicle(false); render(); };
+  });
+}
+
+function setAddingVehicle(on) {
+  addingVehicle = on;
+  $('btnAddVehicle').classList.toggle('hide', on);
+  $('newPlate').classList.toggle('hide', !on);
+  $('btnConfirmVehicle').classList.toggle('hide', !on);
+  $('btnCancelVehicle').classList.toggle('hide', !on);
+  if (on) { $('newPlate').value = ''; $('newPlate').focus(); }
+}
+
+/* ---------- KPIs ---------- */
+function renderKpis() {
+  const records = sortedRecords();
+  const withKm = records.filter(hasKm);
+
+  $('kTotal').textContent = records.length;
+  $('kLastKm').textContent = withKm.length ? fmtNum(withKm[withKm.length - 1].km) + ' km' : '—';
+
+  const counts = {};
+  records.forEach(r => { counts[r.taller] = (counts[r.taller] || 0) + 1; });
+  $('kTaller').textContent = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || '—';
+
+  // Próxima revisión: ritmo de km/día sobre los registros con km conocido
+  // (inmune a los huecos) y media de días entre visitas sobre todos.
+  let next = '—';
+  if (records.length >= 2) {
+    const first = records[0], last = records[records.length - 1];
+    const avgDays = days(first.date, last.date) / (records.length - 1);
+    const nextDate = new Date(new Date(last.date).getTime() + avgDays * 86400000);
+    const nextIso = nextDate.toISOString().slice(0, 10);
+    next = fmtDate(nextIso);
+    if (withKm.length >= 2) {
+      const fk = withKm[0], lk = withKm[withKm.length - 1];
+      const span = days(fk.date, lk.date);
+      if (span > 0) {
+        const kmDay = (lk.km - fk.km) / span;
+        const nextKm = lk.km + kmDay * days(lk.date, nextIso);
+        next = '≈ ' + fmtNum(Math.round(nextKm)) + ' km · ' + fmtDate(nextIso);
+      }
+    }
+  }
+  $('kNext').textContent = next;
+}
+
+/* ---------- aceite ---------- */
+function renderOil() {
+  const records = sortedRecords();
+  const withKm = records.filter(hasKm);
+  const oilRecords = records.filter(r => r.oilIntervalKm && hasKm(r));
+
+  if (!oilRecords.length) { $('oilCard').classList.add('hide'); return; }
+  $('oilCard').classList.remove('hide');
+
+  const last = oilRecords[oilRecords.length - 1];
+  const dueKm = last.km + last.oilIntervalKm;
+  const raw = currentKmInputs[currentVehicle().id];
+  const fallback = withKm.length ? withKm[withKm.length - 1].km : last.km;
+  const currentKm = (raw !== undefined && raw !== '') ? (parseInt(raw, 10) || 0) : fallback;
+  const remaining = dueKm - currentKm;
+
+  $('oilTxt').innerHTML = 'Toca a los <strong>' + fmtNum(dueKm) + ' km</strong> (cambiado a los '
+    + fmtNum(last.km) + ' km, +' + fmtNum(last.oilIntervalKm) + ' km)';
+  $('oilCur').placeholder = fmtNum(fallback);
+  $('oilRem').textContent = remaining >= 0
+    ? 'Faltan ' + fmtNum(remaining) + ' km'
+    : '¡Cambio superado por ' + fmtNum(-remaining) + ' km!';
+  $('oilRem').classList.toggle('late', remaining < 0);
+}
+
+/* ---------- historial ---------- */
+function renderHist() {
+  const cur = currentVehicle();
+  $('histPlate').textContent = cur.plate;
+  const rows = sortedRecords().reverse();
+  if (!rows.length) {
+    $('hist').innerHTML = '<div class="empty">Sin registros todavía.</div>';
+    return;
+  }
+  $('hist').innerHTML = rows.map(r => `
+    <div class="row">
+      <div class="row-top">
+        <span class="row-date">${esc(fmtDate(r.date))}</span>
+        <span class="row-km${hasKm(r) ? '' : ' unk'}">${hasKm(r) ? esc(fmtNum(r.km)) + ' km' : 'km desconocidos'}</span>
+      </div>
+      <div class="row-taller">${esc(r.taller)}</div>
+      <div class="row-bot">
+        <div class="row-rep">${esc(r.reparacion)}</div>
+        <button class="row-del" data-id="${esc(r.id)}">Eliminar</button>
+      </div>
+    </div>`).join('');
+  $('hist').querySelectorAll('.row-del').forEach(b => {
+    b.onclick = () => {
+      if (!confirm('¿Eliminar este registro?')) return;
+      cur.records = cur.records.filter(r => r.id !== b.dataset.id);
+      persist(); render();
+    };
+  });
+}
+
+/* ---------- gráficas ---------- */
+function renderCharts() {
+  const records = sortedRecords();
+  const withKm = records.filter(hasKm);   // los km desconocidos no entran
+
+  // --- línea: km en el tiempo ---
+  const W = 680, H = 220, padL = 40, padR = 20, padT = 20, padB = 40;
+  const skipped = records.length - withKm.length;
+  $('lineNote').textContent = skipped
+    ? ' · ' + skipped + (skipped === 1 ? ' registro sin km, excluido' : ' registros sin km, excluidos')
+    : '';
+
+  if (!withKm.length) {
+    $('lcLine').setAttribute('points', '');
+    $('lcDots').innerHTML = '';
+    $('lcMaxKm').textContent = ''; $('lcMinDate').textContent = ''; $('lcMaxDate').textContent = '';
+  } else {
+    const times = withKm.map(r => new Date(r.date).getTime());
+    const minT = Math.min(...times), maxT = Math.max(...times);
+    const spanT = (maxT - minT) || 1;
+    const maxKm = Math.max(...withKm.map(r => r.km), 1);
+    const top = maxKm * 1.08;
+    const dots = withKm.map((r, i) => ({
+      x: Math.round((padL + (times[i] - minT) / spanT * (W - padL - padR)) * 10) / 10,
+      y: Math.round((padT + (1 - r.km / top) * (H - padT - padB)) * 10) / 10
+    }));
+    $('lcLine').setAttribute('points', dots.map(d => d.x + ',' + d.y).join(' '));
+    $('lcDots').innerHTML = dots.map(d =>
+      `<circle cx="${d.x}" cy="${d.y}" r="4" fill="oklch(0.5 0.14 230)"></circle>`).join('');
+    $('lcMaxKm').textContent = fmtNum(Math.round(top)) + ' km';
+    $('lcMinDate').textContent = fmtDateShort(withKm[0].date);
+    $('lcMaxDate').textContent = fmtDateShort(withKm[withKm.length - 1].date);
+  }
+
+  // --- barras: km entre revisiones (solo entre citas con km conocido) ---
+  const intervals = [];
+  for (let i = 1; i < withKm.length; i++) {
+    intervals.push({ diff: Math.max(0, withKm[i].km - withKm[i - 1].km), date: withKm[i].date });
+  }
+  const maxDiff = Math.max(...intervals.map(d => d.diff), 1);
+  $('intervalBars').innerHTML = intervals.length
+    ? intervals.map(d => `
+        <div class="bar">
+          <div class="bar-v">${fmtNum(d.diff)}</div>
+          <div class="bar-b" style="height:${Math.max(4, Math.round(d.diff / maxDiff * 120))}px"></div>
+          <div class="bar-l">${fmtDateShort(d.date)}</div>
+        </div>`).join('')
+    : '<div class="empty">Sin datos suficientes.</div>';
+
+  // --- barras: reparaciones por año (cuentan todas, con km o sin ellos) ---
+  const yearCounts = {};
+  records.forEach(r => { const y = r.date.slice(0, 4); yearCounts[y] = (yearCounts[y] || 0) + 1; });
+  const years = Object.keys(yearCounts).sort();
+  const maxYear = Math.max(...years.map(y => yearCounts[y]), 1);
+  $('yearBars').innerHTML = years.map(y => `
+    <div class="ybar">
+      <div class="ybar-v">${yearCounts[y]}</div>
+      <div class="ybar-b" style="height:${Math.max(6, Math.round(yearCounts[y] / maxYear * 120))}px"></div>
+      <div class="ybar-l">${y}</div>
+    </div>`).join('');
+
+  // --- tipos de reparación ---
+  const cats = {};
+  records.forEach(r => { const c = categorize(r.reparacion); cats[c] = (cats[c] || 0) + 1; });
+  const catTotal = records.length || 1;
+  $('catBars').innerHTML = Object.keys(cats)
+    .sort((a, b) => cats[b] - cats[a])
+    .map(name => `
+      <div class="cat">
+        <div class="cat-n">${esc(name)}</div>
+        <div class="cat-t"><div class="cat-f" style="width:${Math.round(cats[name] / catTotal * 100)}%"></div></div>
+        <div class="cat-c">${cats[name]}</div>
+      </div>`).join('');
+}
+
+function render() {
+  renderTabs();
+  renderKpis();
+  renderOil();
+  renderHist();
+  renderCharts();
+}
+
+/* ---------- formulario ---------- */
+function showErr(msg) {
+  $('formErr').textContent = msg || '';
+  $('formErr').classList.toggle('hide', !msg);
+}
+
+$('fOil').onchange = () => $('fOilIntervalWrap').classList.toggle('hide', !$('fOil').checked);
+
+$('btnAdd').onclick = () => {
+  const date = $('fDate').value;
+  const taller = $('fTaller').value.trim();
+  if (!date || !taller) { showErr('Introduce al menos fecha y taller.'); return; }
+  const cur = currentVehicle();
+  if (!cur.id) { showErr('Añade primero un vehículo.'); return; }
+  cur.records.push({
+    id: 'r' + Date.now(),
+    date, taller,
+    km: normKm($('fKm').value),
+    reparacion: $('fRep').value.trim(),
+    oilIntervalKm: $('fOil').checked ? (parseInt($('fOilInterval').value, 10) || 20000) : null
+  });
+  persist();
+  $('fDate').value = ''; $('fTaller').value = ''; $('fKm').value = ''; $('fRep').value = '';
+  $('fOil').checked = false; $('fOilInterval').value = '20000';
+  $('fOilIntervalWrap').classList.add('hide');
+  showErr('');
+  render();
+};
+
+/* ---------- vehículos ---------- */
+$('btnAddVehicle').onclick = () => setAddingVehicle(true);
+$('btnCancelVehicle').onclick = () => setAddingVehicle(false);
+$('btnConfirmVehicle').onclick = () => {
+  const plate = $('newPlate').value.trim().toUpperCase();
+  if (!plate) return;
+  const id = 'v' + Date.now();
+  vehicles.push({ id, plate, records: [] });
+  selectedId = id;
+  persist();
+  setAddingVehicle(false);
+  render();
+};
+$('newPlate').onkeydown = e => {
+  if (e.key === 'Enter') $('btnConfirmVehicle').click();
+  if (e.key === 'Escape') setAddingVehicle(false);
+};
+
+/* ---------- km actuales (aceite) ---------- */
+$('oilCur').oninput = () => {
+  currentKmInputs[currentVehicle().id] = $('oilCur').value;
+  renderOil();
+};
+
+/* ---------- arranque ---------- */
+$('ver').textContent = APP_VERSION;
+render();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
