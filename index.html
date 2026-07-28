@@ -15,7 +15,7 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: oklch(0.98 0.004 80); color: oklch(0.22 0.01 80);
          font-family: -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
-  input, textarea, button { font-family: inherit; }
+  input, textarea, button, select { font-family: inherit; }
   ::placeholder { color: oklch(0.6 0.01 80); }
 
   .wrap { min-height: 100vh; padding: 24px 20px 60px; max-width: 1400px; margin: 0 auto; }
@@ -24,12 +24,18 @@
   .sub { font-size:14px; color:oklch(0.5 0.01 80); margin-top:2px; }
   .ver { font-size:11px; color:oklch(0.62 0.01 80); }
 
-  .tabs { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:24px; }
+  .tabs { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
   .tab { padding:9px 16px; border-radius:8px; border:1px solid oklch(0.88 0.01 80); background:white;
          color:oklch(0.3 0.01 80); font-size:14px; font-weight:500; cursor:pointer; }
   .tab.on { border-color:oklch(0.5 0.14 230); background:oklch(0.5 0.14 230); color:white; font-weight:600; }
   .tab-add { padding:9px 14px; border-radius:8px; border:1px dashed oklch(0.75 0.01 80);
              background:transparent; color:oklch(0.45 0.01 80); font-size:14px; cursor:pointer; }
+
+  /* selector de sección */
+  .views { display:inline-flex; background:oklch(0.94 0.006 80); border-radius:10px; padding:3px; margin-bottom:24px; }
+  .view-b { padding:8px 18px; border:none; background:transparent; border-radius:8px;
+            font-size:14px; font-weight:600; color:oklch(0.45 0.01 80); cursor:pointer; }
+  .view-b.on { background:white; color:oklch(0.22 0.01 80); box-shadow:0 1px 3px rgba(0,0,0,0.08); }
 
   .cols { display:grid; grid-template-columns:380px 1fr; gap:24px; align-items:start; }
   .col { display:flex; flex-direction:column; gap:20px; }
@@ -43,10 +49,13 @@
   .field { display:flex; flex-direction:column; gap:4px; font-size:12px;
            color:oklch(0.5 0.01 80); font-weight:600; }
   .field input, .field textarea { padding:9px 10px; border-radius:8px;
-           border:1px solid oklch(0.85 0.01 80); font-size:14px; color:inherit; background:white; }
+           border:1px solid oklch(0.85 0.01 80); font-size:14px; color:inherit; background:white;
+           width:100%; min-width:0; }
   .field textarea { resize:vertical; }
   .hint { font-weight:400; text-transform:none; color:oklch(0.6 0.01 80); }
   .form { display:flex; flex-direction:column; gap:10px; }
+  .form2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .form2 > * { min-width: 0; }   /* si no, los input number no encogen en el móvil */
   .check { display:flex; align-items:center; gap:8px; font-size:13px;
            color:oklch(0.35 0.01 80); padding:4px 0; font-weight:400; }
   .check input { width:16px; height:16px; }
@@ -65,6 +74,9 @@
   .kpi.blue { background:oklch(0.95 0.03 230); border-color:oklch(0.85 0.05 230); }
   .kpi.blue .kpi-l { color:oklch(0.4 0.08 230); }
   .kpi.blue .kpi-v { color:oklch(0.3 0.1 230); }
+  .kpi.green { background:oklch(0.95 0.04 150); border-color:oklch(0.85 0.06 150); }
+  .kpi.green .kpi-l { color:oklch(0.4 0.09 150); }
+  .kpi.green .kpi-v { color:oklch(0.35 0.11 150); }
 
   .oil { background:oklch(0.95 0.03 230); border:1px solid oklch(0.85 0.05 230);
          border-radius:14px; padding:18px 20px; }
@@ -92,11 +104,37 @@
              font-size:12px; cursor:pointer; padding:2px 4px; }
   .empty { padding:24px 0; font-size:13px; color:oklch(0.6 0.01 80); text-align:center; }
 
+  /* ---- repostajes ---- */
+  .fuel-row { display:flex; gap:12px; align-items:flex-start; padding:12px 0;
+              border-bottom:1px solid oklch(0.93 0.008 80); }
+  .fuel-thumb { width:52px; height:52px; border-radius:8px; object-fit:cover; flex-shrink:0;
+                border:1px solid oklch(0.9 0.01 80); cursor:zoom-in; background:oklch(0.96 0.005 80); }
+  .fuel-nothumb { width:52px; height:52px; border-radius:8px; flex-shrink:0; display:flex;
+                  align-items:center; justify-content:center; font-size:20px;
+                  background:oklch(0.96 0.005 80); border:1px dashed oklch(0.88 0.01 80); }
+  .fuel-main { flex:1; min-width:0; }
+  .fuel-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .fuel-date { font-size:13px; font-weight:700; color:oklch(0.45 0.13 150); }
+  .fuel-imp { font-size:13px; font-weight:700; }
+  .fuel-sub { font-size:12px; color:oklch(0.5 0.01 80); margin-top:2px; }
+  .fuel-cons { font-size:12px; font-weight:600; color:oklch(0.45 0.13 150); margin-top:2px; }
+  .fuel-cons.na { color:oklch(0.62 0.01 80); font-weight:400; font-style:italic; }
+  .tag { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px;
+         background:oklch(0.93 0.03 150); color:oklch(0.4 0.1 150); margin-left:6px; }
+  .tag.part { background:oklch(0.94 0.02 80); color:oklch(0.5 0.02 80); }
+
+  .lightbox { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:flex;
+              align-items:center; justify-content:center; z-index:100; padding:20px; }
+  .lightbox img { max-width:100%; max-height:100%; border-radius:10px; }
+  .lightbox-x { position:absolute; top:16px; right:20px; font-size:30px; color:white;
+                background:none; border:none; cursor:pointer; line-height:1; }
+
   .charts2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
   .bars { display:flex; align-items:flex-end; gap:6px; height:150px; overflow-x:auto; }
   .bar { display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; width:34px; }
   .bar-v { font-size:10px; color:oklch(0.45 0.01 80); }
   .bar-b { width:18px; background:oklch(0.7 0.1 230); border-radius:3px 3px 0 0; }
+  .bar-b.green { background:oklch(0.65 0.12 150); }
   .bar-l { font-size:9px; color:oklch(0.55 0.01 80); }
   .ybars { display:flex; align-items:flex-end; gap:10px; height:150px; }
   .ybar { display:flex; flex-direction:column; align-items:center; gap:4px; flex:1; }
@@ -109,6 +147,9 @@
   .cat-t { flex:1; background:oklch(0.95 0.005 80); border-radius:5px; height:16px; overflow:hidden; }
   .cat-f { height:100%; background:oklch(0.55 0.12 230); border-radius:5px; }
   .cat-c { width:28px; font-size:12px; color:oklch(0.5 0.01 80); text-align:right; flex-shrink:0; }
+
+  .legend { display:flex; gap:14px; font-size:11px; color:oklch(0.5 0.01 80); margin-top:6px; }
+  .legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; }
 
   .hide { display:none !important; }
 
@@ -126,7 +167,7 @@
   <div class="head">
     <div>
       <div class="h1">Mantenimiento de flota</div>
-      <div class="sub">Registro de revisiones y evolución por vehículo</div>
+      <div class="sub">Revisiones, repostajes y evolución por vehículo</div>
     </div>
     <div class="ver" id="ver"></div>
   </div>
@@ -140,9 +181,16 @@
     <button class="ghost hide" id="btnCancelVehicle">Cancelar</button>
   </div>
 
-  <div class="cols">
+  <div class="views">
+    <button class="view-b on" id="vbRev">Revisiones</button>
+    <button class="view-b" id="vbFuel">Repostajes</button>
+  </div>
 
-    <!-- ================= columna izquierda ================= -->
+  <!-- ==================================================================
+       VISTA 1 · REVISIONES
+  =================================================================== -->
+  <div class="cols" id="viewRev">
+
     <div class="col">
 
       <div class="card">
@@ -210,12 +258,11 @@
 
     </div>
 
-    <!-- ================= columna derecha ================= -->
     <div class="col">
 
       <div class="card">
         <div class="card-t">Evolución del kilometraje</div>
-        <div class="card-s">Km acumulados a lo largo del tiempo<span id="lineNote"></span></div>
+        <div class="card-s">Km de revisiones y repostajes<span id="lineNote"></span></div>
         <svg width="100%" height="220" viewBox="0 0 680 220" id="lineChart">
           <line x1="40" y1="180" x2="660" y2="180" stroke="oklch(0.88 0.01 80)" stroke-width="1"></line>
           <line x1="40" y1="20" x2="40" y2="180" stroke="oklch(0.88 0.01 80)" stroke-width="1"></line>
@@ -225,6 +272,10 @@
           <text x="40" y="196" font-size="11" fill="oklch(0.5 0.01 80)" id="lcMinDate"></text>
           <text x="620" y="196" font-size="11" fill="oklch(0.5 0.01 80)" text-anchor="end" id="lcMaxDate"></text>
         </svg>
+        <div class="legend">
+          <span><i style="background:oklch(0.5 0.14 230)"></i>Revisión</span>
+          <span><i style="background:oklch(0.65 0.12 150)"></i>Repostaje</span>
+        </div>
       </div>
 
       <div class="charts2">
@@ -248,10 +299,112 @@
 
     </div>
   </div>
+
+  <!-- ==================================================================
+       VISTA 2 · REPOSTAJES
+  =================================================================== -->
+  <div class="cols hide" id="viewFuel">
+
+    <div class="col">
+
+      <div class="card">
+        <div class="card-t" style="margin-bottom:14px;">Registrar repostaje</div>
+        <div class="form">
+          <label class="field">FECHA
+            <input type="date" id="gDate">
+          </label>
+          <label class="field">KM DEL RECIBO <span class="hint">— vacío si no aparecen</span>
+            <input type="number" id="gKm" placeholder="Sin datos" min="0">
+          </label>
+          <div class="form2">
+            <label class="field">LITROS
+              <input type="number" id="gLitros" placeholder="0,00" step="0.01" min="0">
+            </label>
+            <label class="field">IMPORTE €
+              <input type="number" id="gImporte" placeholder="0,00" step="0.01" min="0">
+            </label>
+          </div>
+          <label class="field">GASOLINERA
+            <input id="gEstacion" placeholder="Nombre o localidad">
+          </label>
+          <label class="check">
+            <input type="checkbox" id="gLleno" checked>
+            Depósito lleno
+          </label>
+          <div class="hint" style="font-size:11px; margin-top:-6px;">
+            El consumo solo se calcula entre depósitos llenos: si no llenaste, desmárcalo
+            y sus litros se suman al siguiente lleno.
+          </div>
+          <label class="field">FOTO DEL RECIBO <span class="hint">— opcional</span>
+            <input type="file" id="gFoto" accept="image/*" capture="environment"
+                   style="font-size:12px; padding:7px;">
+          </label>
+          <div id="gFotoPrev"></div>
+          <button class="primary" id="btnAddFuel" style="margin-top:4px;">Añadir repostaje</button>
+          <div class="err hide" id="fuelErr"></div>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi green">
+          <div class="kpi-l">Consumo medio</div>
+          <div class="kpi-v" id="gAvg">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-l">Repostajes</div>
+          <div class="kpi-v" id="gCount">0</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-l">Gasto total</div>
+          <div class="kpi-v sm" id="gTotal">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-l">Precio medio</div>
+          <div class="kpi-v sm" id="gPrice">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-l">Litros totales</div>
+          <div class="kpi-v sm" id="gLitrosTot">—</div>
+        </div>
+        <div class="kpi blue">
+          <div class="kpi-l">Coste por 100 km</div>
+          <div class="kpi-v sm" id="gCost100">—</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding-bottom:8px;">
+        <div class="card-t" style="margin-bottom:12px;">Repostajes (<span id="fuelPlate"></span>)</div>
+        <div class="hist" id="fuelList"></div>
+      </div>
+
+    </div>
+
+    <div class="col">
+
+      <div class="card">
+        <div class="card-t">Consumo por repostaje</div>
+        <div class="card-s" style="margin-bottom:14px;">Litros por 100 km entre depósitos llenos</div>
+        <div class="bars" id="consBars"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-t">Gasto mensual en gasoil</div>
+        <div class="card-s" style="margin-bottom:14px;">Euros por mes</div>
+        <div class="bars" id="spendBars"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-t">Precio del litro</div>
+        <div class="card-s" style="margin-bottom:14px;">€/l en cada repostaje</div>
+        <div class="bars" id="priceBars"></div>
+      </div>
+
+    </div>
+  </div>
 </div>
 
 <script>
-const APP_VERSION = 'v1.0.0';
+const APP_VERSION = 'v1.1.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 
 /* ---------- datos iniciales ----------
@@ -289,18 +442,24 @@ function seedVehicles() {
     records: RAW_SEED.map((r, i) => ({
       id: 's' + i, date: r[0], taller: r[1], km: normKm(r[2]),
       reparacion: r[3], oilIntervalKm: r[4] || null
-    }))
+    })),
+    fuel: []
   }];
 }
 
 /* km desconocido = null. El 0 se trata como desconocido: un vehículo
-   con 0 km no va al taller, así que siempre es un dato que falta. */
+   con 0 km no va al taller ni reposta, así que siempre es un dato que falta. */
 function normKm(v) {
   if (v === null || v === undefined || v === '') return null;
   const n = parseInt(v, 10);
   return (isNaN(n) || n <= 0) ? null : n;
 }
 function hasKm(r) { return r.km !== null && r.km !== undefined; }
+function num(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return (isNaN(n) || n <= 0) ? null : n;
+}
 
 function loadVehicles() {
   try {
@@ -310,7 +469,8 @@ function loadVehicles() {
       if (Array.isArray(parsed) && parsed.length) {
         return parsed.map(v => ({
           ...v,
-          records: (v.records || []).map(r => ({ ...r, km: normKm(r.km) }))
+          records: (v.records || []).map(r => ({ ...r, km: normKm(r.km) })),
+          fuel: (v.fuel || []).map(f => ({ ...f, km: normKm(f.km) }))
         }));
       }
     }
@@ -338,7 +498,14 @@ function fmtDateShort(iso) {
   const [y, m, d] = iso.split('-');
   return d + ' ' + MONTHS[parseInt(m, 10) - 1] + ' ' + y.slice(2);
 }
+function fmtMonth(ym) {
+  const [y, m] = ym.split('-');
+  return MONTHS[parseInt(m, 10) - 1] + ' ' + y.slice(2);
+}
 function fmtNum(n) { return Number(n || 0).toLocaleString('es-ES'); }
+function fmtDec(n, d) {
+  return Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
 function days(a, b) { return (new Date(b) - new Date(a)) / 86400000; }
 function esc(s) {
   return String(s == null ? '' : s)
@@ -347,20 +514,102 @@ function esc(s) {
 }
 const $ = id => document.getElementById(id);
 
+/* ==========================================================
+   FOTOS DE RECIBOS
+   Van en IndexedDB, no en localStorage: una foto comprimida
+   ocupa ~80 KB y localStorage se llena con media docena.
+========================================================== */
+const Fotos = {
+  db: null,
+  open() {
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((res, rej) => {
+      const req = indexedDB.open('flota-fotos', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('fotos');
+      req.onsuccess = () => { this.db = req.result; res(this.db); };
+      req.onerror = () => rej(req.error);
+    });
+  },
+  async put(id, dataUrl) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('fotos', 'readwrite');
+      tx.objectStore('fotos').put(dataUrl, id);
+      tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+    });
+  },
+  async get(id) {
+    const db = await this.open();
+    return new Promise((res) => {
+      const tx = db.transaction('fotos', 'readonly');
+      const r = tx.objectStore('fotos').get(id);
+      r.onsuccess = () => res(r.result || null);
+      r.onerror = () => res(null);
+    });
+  },
+  async del(id) {
+    const db = await this.open();
+    return new Promise((res) => {
+      const tx = db.transaction('fotos', 'readwrite');
+      tx.objectStore('fotos').delete(id);
+      tx.oncomplete = res; tx.onerror = res;
+    });
+  }
+};
+
+/* Reduce la foto a 1200 px de lado mayor y JPEG 0.6 (~60-120 KB),
+   suficiente para leer un recibo y ligero para sincronizar después. */
+function comprimirFoto(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1200;
+        let { width: w, height: h } = img;
+        if (w > max || h > max) {
+          const k = max / Math.max(w, h);
+          w = Math.round(w * k); h = Math.round(h * k);
+        }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        res(c.toDataURL('image/jpeg', 0.6));
+      };
+      img.onerror = rej;
+      img.src = fr.result;
+    };
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+function verFoto(dataUrl) {
+  const box = document.createElement('div');
+  box.className = 'lightbox';
+  box.innerHTML = '<button class="lightbox-x">&times;</button><img alt="Recibo">';
+  box.querySelector('img').src = dataUrl;
+  box.onclick = () => box.remove();
+  document.body.appendChild(box);
+}
+
 /* ---------- estado ---------- */
 let vehicles = loadVehicles();
 let selectedId = vehicles.length ? vehicles[0].id : null;
-let addingVehicle = false;
 let currentKmInputs = {};
+let fotoPendiente = null;   // dataURL de la foto elegida, aún sin guardar
 
 function persist() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles)); } catch (e) {}
 }
 function currentVehicle() {
-  return vehicles.find(v => v.id === selectedId) || vehicles[0] || { id: null, plate: '', records: [] };
+  return vehicles.find(v => v.id === selectedId) || vehicles[0] || { id: null, plate: '', records: [], fuel: [] };
 }
 function sortedRecords() {
-  return [...currentVehicle().records].sort((a, b) => a.date.localeCompare(b.date));
+  return [...(currentVehicle().records || [])].sort((a, b) => a.date.localeCompare(b.date));
+}
+function sortedFuel() {
+  return [...(currentVehicle().fuel || [])].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /* ---------- pestañas de vehículo ---------- */
@@ -375,7 +624,6 @@ function renderTabs() {
 }
 
 function setAddingVehicle(on) {
-  addingVehicle = on;
   $('btnAddVehicle').classList.toggle('hide', on);
   $('newPlate').classList.toggle('hide', !on);
   $('btnConfirmVehicle').classList.toggle('hide', !on);
@@ -383,20 +631,32 @@ function setAddingVehicle(on) {
   if (on) { $('newPlate').value = ''; $('newPlate').focus(); }
 }
 
-/* ---------- KPIs ---------- */
+/* ==========================================================
+   KM: revisiones + repostajes juntos
+   Los recibos de gasoil traen km, así que dan muchos más
+   puntos que las visitas al taller.
+========================================================== */
+function puntosKm() {
+  const pts = [];
+  sortedRecords().filter(hasKm).forEach(r => pts.push({ date: r.date, km: r.km, tipo: 'rev' }));
+  sortedFuel().filter(hasKm).forEach(f => pts.push({ date: f.date, km: f.km, tipo: 'fuel' }));
+  return pts.sort((a, b) => a.date.localeCompare(b.date) || a.km - b.km);
+}
+
+/* ---------- KPIs de revisiones ---------- */
 function renderKpis() {
   const records = sortedRecords();
-  const withKm = records.filter(hasKm);
+  const pts = puntosKm();
 
   $('kTotal').textContent = records.length;
-  $('kLastKm').textContent = withKm.length ? fmtNum(withKm[withKm.length - 1].km) + ' km' : '—';
+  $('kLastKm').textContent = pts.length ? fmtNum(pts[pts.length - 1].km) + ' km' : '—';
 
   const counts = {};
   records.forEach(r => { counts[r.taller] = (counts[r.taller] || 0) + 1; });
   $('kTaller').textContent = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || '—';
 
-  // Próxima revisión: ritmo de km/día sobre los registros con km conocido
-  // (inmune a los huecos) y media de días entre visitas sobre todos.
+  // Próxima revisión: ritmo de km/día sobre todos los puntos con km
+  // (inmune a los huecos) y media de días entre visitas al taller.
   let next = '—';
   if (records.length >= 2) {
     const first = records[0], last = records[records.length - 1];
@@ -404,8 +664,8 @@ function renderKpis() {
     const nextDate = new Date(new Date(last.date).getTime() + avgDays * 86400000);
     const nextIso = nextDate.toISOString().slice(0, 10);
     next = fmtDate(nextIso);
-    if (withKm.length >= 2) {
-      const fk = withKm[0], lk = withKm[withKm.length - 1];
+    if (pts.length >= 2) {
+      const fk = pts[0], lk = pts[pts.length - 1];
       const span = days(fk.date, lk.date);
       if (span > 0) {
         const kmDay = (lk.km - fk.km) / span;
@@ -419,17 +679,15 @@ function renderKpis() {
 
 /* ---------- aceite ---------- */
 function renderOil() {
-  const records = sortedRecords();
-  const withKm = records.filter(hasKm);
-  const oilRecords = records.filter(r => r.oilIntervalKm && hasKm(r));
-
+  const oilRecords = sortedRecords().filter(r => r.oilIntervalKm && hasKm(r));
   if (!oilRecords.length) { $('oilCard').classList.add('hide'); return; }
   $('oilCard').classList.remove('hide');
 
+  const pts = puntosKm();
   const last = oilRecords[oilRecords.length - 1];
   const dueKm = last.km + last.oilIntervalKm;
   const raw = currentKmInputs[currentVehicle().id];
-  const fallback = withKm.length ? withKm[withKm.length - 1].km : last.km;
+  const fallback = pts.length ? pts[pts.length - 1].km : last.km;
   const currentKm = (raw !== undefined && raw !== '') ? (parseInt(raw, 10) || 0) : fallback;
   const remaining = dueKm - currentKm;
 
@@ -442,7 +700,7 @@ function renderOil() {
   $('oilRem').classList.toggle('late', remaining < 0);
 }
 
-/* ---------- historial ---------- */
+/* ---------- historial de revisiones ---------- */
 function renderHist() {
   const cur = currentVehicle();
   $('histPlate').textContent = cur.plate;
@@ -472,38 +730,41 @@ function renderHist() {
   });
 }
 
-/* ---------- gráficas ---------- */
+/* ---------- gráficas de revisiones ---------- */
 function renderCharts() {
   const records = sortedRecords();
-  const withKm = records.filter(hasKm);   // los km desconocidos no entran
+  const withKm = records.filter(hasKm);
+  const pts = puntosKm();
 
-  // --- línea: km en el tiempo ---
+  // --- línea: km en el tiempo (revisiones + repostajes) ---
   const W = 680, H = 220, padL = 40, padR = 20, padT = 20, padB = 40;
   const skipped = records.length - withKm.length;
   $('lineNote').textContent = skipped
-    ? ' · ' + skipped + (skipped === 1 ? ' registro sin km, excluido' : ' registros sin km, excluidos')
+    ? ' · ' + skipped + (skipped === 1 ? ' revisión sin km, excluida' : ' revisiones sin km, excluidas')
     : '';
 
-  if (!withKm.length) {
+  if (!pts.length) {
     $('lcLine').setAttribute('points', '');
     $('lcDots').innerHTML = '';
     $('lcMaxKm').textContent = ''; $('lcMinDate').textContent = ''; $('lcMaxDate').textContent = '';
   } else {
-    const times = withKm.map(r => new Date(r.date).getTime());
+    const times = pts.map(p => new Date(p.date).getTime());
     const minT = Math.min(...times), maxT = Math.max(...times);
     const spanT = (maxT - minT) || 1;
-    const maxKm = Math.max(...withKm.map(r => r.km), 1);
+    const maxKm = Math.max(...pts.map(p => p.km), 1);
     const top = maxKm * 1.08;
-    const dots = withKm.map((r, i) => ({
+    const dots = pts.map((p, i) => ({
       x: Math.round((padL + (times[i] - minT) / spanT * (W - padL - padR)) * 10) / 10,
-      y: Math.round((padT + (1 - r.km / top) * (H - padT - padB)) * 10) / 10
+      y: Math.round((padT + (1 - p.km / top) * (H - padT - padB)) * 10) / 10,
+      tipo: p.tipo
     }));
     $('lcLine').setAttribute('points', dots.map(d => d.x + ',' + d.y).join(' '));
-    $('lcDots').innerHTML = dots.map(d =>
-      `<circle cx="${d.x}" cy="${d.y}" r="4" fill="oklch(0.5 0.14 230)"></circle>`).join('');
+    $('lcDots').innerHTML = dots.map(d => d.tipo === 'rev'
+      ? `<circle cx="${d.x}" cy="${d.y}" r="4" fill="oklch(0.5 0.14 230)"></circle>`
+      : `<circle cx="${d.x}" cy="${d.y}" r="2.5" fill="oklch(0.65 0.12 150)"></circle>`).join('');
     $('lcMaxKm').textContent = fmtNum(Math.round(top)) + ' km';
-    $('lcMinDate').textContent = fmtDateShort(withKm[0].date);
-    $('lcMaxDate').textContent = fmtDateShort(withKm[withKm.length - 1].date);
+    $('lcMinDate').textContent = fmtDateShort(pts[0].date);
+    $('lcMaxDate').textContent = fmtDateShort(pts[pts.length - 1].date);
   }
 
   // --- barras: km entre revisiones (solo entre citas con km conocido) ---
@@ -547,18 +808,191 @@ function renderCharts() {
       </div>`).join('');
 }
 
+/* ==========================================================
+   CONSUMO
+   Solo es real de lleno a lleno: entre dos repostajes con
+   "depósito lleno" y km conocidos, los litros gastados son
+   los de ese lleno más los de los repostajes parciales que
+   haya habido en medio.
+========================================================== */
+function calcConsumos() {
+  const fuel = sortedFuel();
+  const out = new Map();      // id del repostaje -> l/100km
+  let anclaKm = null;         // km del último lleno con km conocido
+  let litrosAcum = 0;
+
+  fuel.forEach(f => {
+    const l = num(f.litros);
+    if (anclaKm !== null && l) litrosAcum += l;
+
+    if (f.lleno && hasKm(f)) {
+      if (anclaKm !== null && f.km > anclaKm && litrosAcum > 0) {
+        out.set(f.id, litrosAcum / (f.km - anclaKm) * 100);
+      }
+      anclaKm = f.km;
+      litrosAcum = 0;
+    }
+  });
+  return out;
+}
+
+function renderFuel() {
+  const cur = currentVehicle();
+  const fuel = sortedFuel();
+  const cons = calcConsumos();
+  $('fuelPlate').textContent = cur.plate;
+
+  /* --- KPIs --- */
+  const litrosTot = fuel.reduce((a, f) => a + (num(f.litros) || 0), 0);
+  const gastoTot = fuel.reduce((a, f) => a + (num(f.importe) || 0), 0);
+  $('gCount').textContent = fuel.length;
+  $('gTotal').textContent = gastoTot ? fmtDec(gastoTot, 2) + ' €' : '—';
+  $('gLitrosTot').textContent = litrosTot ? fmtDec(litrosTot, 2) + ' l' : '—';
+  $('gPrice').textContent = (litrosTot && gastoTot) ? fmtDec(gastoTot / litrosTot, 3) + ' €/l' : '—';
+
+  // consumo medio global: de primer a último lleno con km
+  const llenos = fuel.filter(f => f.lleno && hasKm(f));
+  let medio = null;
+  if (llenos.length >= 2) {
+    const dist = llenos[llenos.length - 1].km - llenos[0].km;
+    if (dist > 0) {
+      // litros repostados después del primer lleno, hasta el último incluido
+      const desde = llenos[0].date, hasta = llenos[llenos.length - 1].date;
+      const litros = fuel
+        .filter(f => f.date > desde || (f.date === hasta && f.id === llenos[llenos.length - 1].id))
+        .filter(f => f.date <= hasta)
+        .reduce((a, f) => a + (num(f.litros) || 0), 0);
+      if (litros > 0) medio = litros / dist * 100;
+    }
+  }
+  $('gAvg').textContent = medio ? fmtDec(medio, 2) + ' l' : '—';
+  $('gCost100').textContent = (medio && litrosTot && gastoTot)
+    ? fmtDec(medio * (gastoTot / litrosTot), 2) + ' €' : '—';
+
+  /* --- listado --- */
+  const rows = [...fuel].reverse();
+  if (!rows.length) {
+    $('fuelList').innerHTML = '<div class="empty">Sin repostajes todavía.</div>';
+  } else {
+    $('fuelList').innerHTML = rows.map(f => {
+      const l = num(f.litros), imp = num(f.importe);
+      const c = cons.get(f.id);
+      const partes = [];
+      if (hasKm(f)) partes.push(fmtNum(f.km) + ' km'); else partes.push('<em>km desconocidos</em>');
+      if (l) partes.push(fmtDec(l, 2) + ' l');
+      if (l && imp) partes.push(fmtDec(imp / l, 3) + ' €/l');
+      if (f.estacion) partes.push(esc(f.estacion));
+      return `
+      <div class="fuel-row">
+        ${f.foto
+          ? `<img class="fuel-thumb" data-foto="${esc(f.id)}" alt="Recibo">`
+          : `<div class="fuel-nothumb">⛽</div>`}
+        <div class="fuel-main">
+          <div class="fuel-top">
+            <span class="fuel-date">${esc(fmtDate(f.date))}${f.lleno
+              ? '<span class="tag">LLENO</span>'
+              : '<span class="tag part">PARCIAL</span>'}</span>
+            <span class="fuel-imp">${imp ? fmtDec(imp, 2) + ' €' : ''}</span>
+          </div>
+          <div class="fuel-sub">${partes.join(' · ')}</div>
+          <div class="fuel-cons${c ? '' : ' na'}">${c
+            ? fmtDec(c, 2) + ' l/100 km'
+            : 'consumo no calculable'}</div>
+        </div>
+        <button class="row-del" data-del="${esc(f.id)}">Eliminar</button>
+      </div>`;
+    }).join('');
+
+    // miniaturas (se leen de IndexedDB)
+    $('fuelList').querySelectorAll('.fuel-thumb').forEach(async img => {
+      const d = await Fotos.get(img.dataset.foto);
+      if (d) { img.src = d; img.onclick = () => verFoto(d); }
+    });
+    $('fuelList').querySelectorAll('[data-del]').forEach(b => {
+      b.onclick = async () => {
+        if (!confirm('¿Eliminar este repostaje?')) return;
+        await Fotos.del(b.dataset.del);
+        cur.fuel = cur.fuel.filter(f => f.id !== b.dataset.del);
+        persist(); render();
+      };
+    });
+  }
+
+  /* --- gráficas --- */
+  const consArr = fuel.filter(f => cons.has(f.id)).map(f => ({ v: cons.get(f.id), date: f.date }));
+  const maxCons = Math.max(...consArr.map(c => c.v), 1);
+  $('consBars').innerHTML = consArr.length
+    ? consArr.map(c => `
+        <div class="bar">
+          <div class="bar-v">${fmtDec(c.v, 1)}</div>
+          <div class="bar-b green" style="height:${Math.max(4, Math.round(c.v / maxCons * 120))}px"></div>
+          <div class="bar-l">${fmtDateShort(c.date)}</div>
+        </div>`).join('')
+    : '<div class="empty">Hacen falta dos repostajes con depósito lleno y km.</div>';
+
+  const porMes = {};
+  fuel.forEach(f => {
+    const imp = num(f.importe); if (!imp) return;
+    const ym = f.date.slice(0, 7);
+    porMes[ym] = (porMes[ym] || 0) + imp;
+  });
+  const meses = Object.keys(porMes).sort();
+  const maxMes = Math.max(...meses.map(m => porMes[m]), 1);
+  $('spendBars').innerHTML = meses.length
+    ? meses.map(m => `
+        <div class="bar">
+          <div class="bar-v">${Math.round(porMes[m])}</div>
+          <div class="bar-b" style="height:${Math.max(4, Math.round(porMes[m] / maxMes * 120))}px"></div>
+          <div class="bar-l">${fmtMonth(m)}</div>
+        </div>`).join('')
+    : '<div class="empty">Sin importes registrados.</div>';
+
+  const precios = fuel.map(f => {
+    const l = num(f.litros), imp = num(f.importe);
+    return (l && imp) ? { v: imp / l, date: f.date } : null;
+  }).filter(Boolean);
+  const maxP = Math.max(...precios.map(p => p.v), 0.1);
+  const minP = Math.min(...precios.map(p => p.v), maxP);
+  $('priceBars').innerHTML = precios.length
+    ? precios.map(p => {
+        // escala desde un 10% por debajo del mínimo, si no todas salen iguales
+        const base = minP * 0.9;
+        const h = (p.v - base) / ((maxP - base) || 1) * 110 + 10;
+        return `
+        <div class="bar">
+          <div class="bar-v">${fmtDec(p.v, 3)}</div>
+          <div class="bar-b" style="height:${Math.round(h)}px"></div>
+          <div class="bar-l">${fmtDateShort(p.date)}</div>
+        </div>`;
+      }).join('')
+    : '<div class="empty">Sin litros e importe registrados.</div>';
+}
+
 function render() {
   renderTabs();
   renderKpis();
   renderOil();
   renderHist();
   renderCharts();
+  renderFuel();
 }
 
-/* ---------- formulario ---------- */
-function showErr(msg) {
-  $('formErr').textContent = msg || '';
-  $('formErr').classList.toggle('hide', !msg);
+/* ---------- cambio de vista ---------- */
+function setView(v) {
+  const rev = v === 'rev';
+  $('viewRev').classList.toggle('hide', !rev);
+  $('viewFuel').classList.toggle('hide', rev);
+  $('vbRev').classList.toggle('on', rev);
+  $('vbFuel').classList.toggle('on', !rev);
+  localStorage.setItem('flota_view', v);
+}
+$('vbRev').onclick = () => setView('rev');
+$('vbFuel').onclick = () => setView('fuel');
+
+/* ---------- formulario de revisión ---------- */
+function showErr(id, msg) {
+  $(id).textContent = msg || '';
+  $(id).classList.toggle('hide', !msg);
 }
 
 $('fOil').onchange = () => $('fOilIntervalWrap').classList.toggle('hide', !$('fOil').checked);
@@ -566,9 +1000,9 @@ $('fOil').onchange = () => $('fOilIntervalWrap').classList.toggle('hide', !$('fO
 $('btnAdd').onclick = () => {
   const date = $('fDate').value;
   const taller = $('fTaller').value.trim();
-  if (!date || !taller) { showErr('Introduce al menos fecha y taller.'); return; }
+  if (!date || !taller) { showErr('formErr', 'Introduce al menos fecha y taller.'); return; }
   const cur = currentVehicle();
-  if (!cur.id) { showErr('Añade primero un vehículo.'); return; }
+  if (!cur.id) { showErr('formErr', 'Añade primero un vehículo.'); return; }
   cur.records.push({
     id: 'r' + Date.now(),
     date, taller,
@@ -580,7 +1014,55 @@ $('btnAdd').onclick = () => {
   $('fDate').value = ''; $('fTaller').value = ''; $('fKm').value = ''; $('fRep').value = '';
   $('fOil').checked = false; $('fOilInterval').value = '20000';
   $('fOilIntervalWrap').classList.add('hide');
-  showErr('');
+  showErr('formErr', '');
+  render();
+};
+
+/* ---------- formulario de repostaje ---------- */
+$('gFoto').onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) { fotoPendiente = null; $('gFotoPrev').innerHTML = ''; return; }
+  $('gFotoPrev').innerHTML = '<div class="hint" style="font-size:12px;">Procesando foto…</div>';
+  try {
+    fotoPendiente = await comprimirFoto(file);
+    const kb = Math.round(fotoPendiente.length * 0.75 / 1024);
+    $('gFotoPrev').innerHTML =
+      `<img src="${fotoPendiente}" class="fuel-thumb" style="width:70px;height:70px;">
+       <span class="hint" style="font-size:11px; margin-left:8px;">${kb} KB</span>`;
+    $('gFotoPrev').querySelector('img').onclick = () => verFoto(fotoPendiente);
+  } catch (err) {
+    fotoPendiente = null;
+    $('gFotoPrev').innerHTML = '<div class="err">No se pudo leer la imagen.</div>';
+  }
+};
+
+$('btnAddFuel').onclick = async () => {
+  const date = $('gDate').value;
+  const litros = num($('gLitros').value);
+  const importe = num($('gImporte').value);
+  if (!date) { showErr('fuelErr', 'Pon al menos la fecha.'); return; }
+  if (!litros && !importe) { showErr('fuelErr', 'Pon los litros o el importe.'); return; }
+  const cur = currentVehicle();
+  if (!cur.id) { showErr('fuelErr', 'Añade primero un vehículo.'); return; }
+
+  const id = 'g' + Date.now();
+  if (fotoPendiente) { try { await Fotos.put(id, fotoPendiente); } catch (e) {} }
+
+  cur.fuel = cur.fuel || [];
+  cur.fuel.push({
+    id, date,
+    km: normKm($('gKm').value),
+    litros, importe,
+    estacion: $('gEstacion').value.trim(),
+    lleno: $('gLleno').checked,
+    foto: !!fotoPendiente
+  });
+  persist();
+
+  $('gDate').value = ''; $('gKm').value = ''; $('gLitros').value = '';
+  $('gImporte').value = ''; $('gFoto').value = ''; $('gLleno').checked = true;
+  fotoPendiente = null; $('gFotoPrev').innerHTML = '';
+  showErr('fuelErr', '');
   render();
 };
 
@@ -591,7 +1073,7 @@ $('btnConfirmVehicle').onclick = () => {
   const plate = $('newPlate').value.trim().toUpperCase();
   if (!plate) return;
   const id = 'v' + Date.now();
-  vehicles.push({ id, plate, records: [] });
+  vehicles.push({ id, plate, records: [], fuel: [] });
   selectedId = id;
   persist();
   setAddingVehicle(false);
@@ -610,6 +1092,7 @@ $('oilCur').oninput = () => {
 
 /* ---------- arranque ---------- */
 $('ver').textContent = APP_VERSION;
+setView(localStorage.getItem('flota_view') === 'fuel' ? 'fuel' : 'rev');
 render();
 
 if ('serviceWorker' in navigator) {
