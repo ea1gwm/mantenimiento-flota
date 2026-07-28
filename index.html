@@ -119,6 +119,7 @@
   .fuel-sub { font-size:12px; color:oklch(0.5 0.01 80); margin-top:2px; }
   .fuel-cons { font-size:12px; font-weight:600; color:oklch(0.45 0.13 150); margin-top:2px; }
   .fuel-cons.na { color:oklch(0.62 0.01 80); font-weight:400; font-style:italic; }
+  .fuel-cons.warn { color:oklch(0.55 0.16 55); }
   .tag { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px;
          background:oklch(0.93 0.03 150); color:oklch(0.4 0.1 150); margin-left:6px; }
   .tag.part { background:oklch(0.94 0.02 80); color:oklch(0.5 0.02 80); }
@@ -383,7 +384,7 @@
 
       <div class="card">
         <div class="card-t">Consumo por repostaje</div>
-        <div class="card-s" style="margin-bottom:14px;">Litros por 100 km entre depósitos llenos</div>
+        <div class="card-s" style="margin-bottom:14px;">Litros por 100 km entre depósitos llenos<span id="consNote"></span></div>
         <div class="bars" id="consBars"></div>
       </div>
 
@@ -404,7 +405,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.2.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 
 /* ---------- datos iniciales ----------
@@ -435,6 +436,34 @@ const RAW_SEED = [
   ["2026-07-24","Talleres Soledad Naron ( Rio do Pozo )",185992,"Cambio de las ruedas traseras",null]
 ];
 
+/* Repostajes leídos de los recibos Solred DKV de julio de 2026.
+   [fecha, km, litros, importe €, gasolinera]
+   Se dan por depósito lleno: los cinco consumos que salen de ellos
+   (10,71 · 10,91 · 10,79 · 10,94 · 10,84 l/100) son demasiado
+   parejos para no serlo. Si alguno fue parcial, desmárcalo. */
+const FUEL_SEED = [
+  ["2026-06-02", 175885, 60.63, 103.01, "Campsa Fene (N-651)"],
+  ["2026-06-04", 176638, 79.06, 134.01, "Campsa Fene (N-651)"],
+  ["2026-06-08", 177305, 68.93, 115.73, "Campsa Fene (N-651)"],
+  ["2026-06-10", 177983, 71.50, 120.05, "Campsa Fene (N-651)"],
+  ["2026-06-12", 178655, 72.36, 120.48, "Campsa Fene (N-651)"],
+  ["2026-06-16", 179350, 75.23, 123.00, "Campsa Fene (N-651)"],
+  ["2026-06-17", 179916, 57.44,  93.00, "Campsa Fene (N-651)"],
+  ["2026-06-19", 180604, 71.17, 113.52, "Campsa Fene (N-651)"],
+  ["2026-07-13", 183080, 69.22, 111.79, "Campsa Fene (N-651)"],
+  ["2026-07-15", 183627, 58.57,  96.00, "E.S. La Telva (Cambre)"],
+  ["2026-07-17", 184142, 56.18,  96.01, "Chousal (Cataboris)"],
+  ["2026-07-21", 184802, 71.23, 125.01, "Campsa Miño (AP-9)"],
+  ["2026-07-23", 185436, 69.36, 124.09, "E.S. La Telva (Cambre)"],
+  ["2026-07-27", 186129, 75.15, 136.70, "Campsa Miño (AP-9)"]
+];
+function seedFuel() {
+  return FUEL_SEED.map((f, i) => ({
+    id: 'gs' + i, date: f[0], km: f[1], litros: f[2], importe: f[3],
+    estacion: f[4], lleno: true, foto: false
+  }));
+}
+
 function seedVehicles() {
   return [{
     id: 'v1',
@@ -443,7 +472,7 @@ function seedVehicles() {
       id: 's' + i, date: r[0], taller: r[1], km: normKm(r[2]),
       reparacion: r[3], oilIntervalKm: r[4] || null
     })),
-    fuel: []
+    fuel: seedFuel()
   }];
 }
 
@@ -467,11 +496,21 @@ function loadVehicles() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length) {
-        return parsed.map(v => ({
+        const vs = parsed.map(v => ({
           ...v,
           records: (v.records || []).map(r => ({ ...r, km: normKm(r.km) })),
           fuel: (v.fuel || []).map(f => ({ ...f, km: normKm(f.km) }))
         }));
+        // Los repostajes llegaron después que el resto: se meten una sola
+        // vez en quien ya tenía datos guardados y ninguno registrado.
+        if (!localStorage.getItem('flota_seed_fuel2')) {
+          localStorage.setItem('flota_seed_fuel2', '1');
+          const v = vs.find(x => x.plate === '8254LSP');
+          // Solo se toca si no hay repostajes o si los que hay son la propia
+          // semilla (ids 'gs…'): lo que hayas metido tú no se pisa nunca.
+          if (v && v.fuel.every(f => String(f.id).startsWith('gs'))) v.fuel = seedFuel();
+        }
+        return vs;
       }
     }
   } catch (e) {}
@@ -815,9 +854,15 @@ function renderCharts() {
    los de ese lleno más los de los repostajes parciales que
    haya habido en medio.
 ========================================================== */
+/* Un consumo fuera de esta horquilla no es un consumo: o falta algún
+   repostaje por registrar (sale bajísimo, porque se atribuyen los litros
+   de un depósito a los km de tres), o hay un km o unos litros mal
+   tecleados. Se marca y se deja fuera de la media y de la gráfica. */
+const CONSUMO_MIN = 4, CONSUMO_MAX = 25;
+
 function calcConsumos() {
   const fuel = sortedFuel();
-  const out = new Map();      // id del repostaje -> l/100km
+  const out = new Map();      // id del repostaje -> { l100, litros, dist, ok }
   let anclaKm = null;         // km del último lleno con km conocido
   let litrosAcum = 0;
 
@@ -827,7 +872,12 @@ function calcConsumos() {
 
     if (f.lleno && hasKm(f)) {
       if (anclaKm !== null && f.km > anclaKm && litrosAcum > 0) {
-        out.set(f.id, litrosAcum / (f.km - anclaKm) * 100);
+        const dist = f.km - anclaKm;
+        const l100 = litrosAcum / dist * 100;
+        out.set(f.id, {
+          l100, litros: litrosAcum, dist,
+          ok: l100 >= CONSUMO_MIN && l100 <= CONSUMO_MAX
+        });
       }
       anclaKm = f.km;
       litrosAcum = 0;
@@ -850,22 +900,20 @@ function renderFuel() {
   $('gLitrosTot').textContent = litrosTot ? fmtDec(litrosTot, 2) + ' l' : '—';
   $('gPrice').textContent = (litrosTot && gastoTot) ? fmtDec(gastoTot / litrosTot, 3) + ' €/l' : '—';
 
-  // consumo medio global: de primer a último lleno con km
-  const llenos = fuel.filter(f => f.lleno && hasKm(f));
-  let medio = null;
-  if (llenos.length >= 2) {
-    const dist = llenos[llenos.length - 1].km - llenos[0].km;
-    if (dist > 0) {
-      // litros repostados después del primer lleno, hasta el último incluido
-      const desde = llenos[0].date, hasta = llenos[llenos.length - 1].date;
-      const litros = fuel
-        .filter(f => f.date > desde || (f.date === hasta && f.id === llenos[llenos.length - 1].id))
-        .filter(f => f.date <= hasta)
-        .reduce((a, f) => a + (num(f.litros) || 0), 0);
-      if (litros > 0) medio = litros / dist * 100;
-    }
+  // Consumo medio: litros y km de los tramos válidos, sumados. Así un hueco
+  // (repostajes sin registrar) no arrastra la media hacia abajo.
+  let medio = null, tramosMalos = 0;
+  const validos = [...cons.values()].filter(c => c.ok);
+  tramosMalos = cons.size - validos.length;
+  if (validos.length) {
+    const km = validos.reduce((a, c) => a + c.dist, 0);
+    const l = validos.reduce((a, c) => a + c.litros, 0);
+    if (km > 0) medio = l / km * 100;
   }
   $('gAvg').textContent = medio ? fmtDec(medio, 2) + ' l' : '—';
+  $('consNote').textContent = tramosMalos
+    ? ' · ' + tramosMalos + (tramosMalos === 1 ? ' tramo excluido' : ' tramos excluidos') + ' por datos incompletos'
+    : '';
   $('gCost100').textContent = (medio && litrosTot && gastoTot)
     ? fmtDec(medio * (gastoTot / litrosTot), 2) + ' €' : '—';
 
@@ -895,8 +943,12 @@ function renderFuel() {
             <span class="fuel-imp">${imp ? fmtDec(imp, 2) + ' €' : ''}</span>
           </div>
           <div class="fuel-sub">${partes.join(' · ')}</div>
-          <div class="fuel-cons${c ? '' : ' na'}">${c
-            ? fmtDec(c, 2) + ' l/100 km'
+          <div class="fuel-cons${c ? (c.ok ? '' : ' warn') : ' na'}">${c
+            ? (c.ok
+                ? fmtDec(c.l100, 2) + ' l/100 km'
+                : fmtDec(c.l100, 2) + ' l/100 km · ' + (c.l100 < CONSUMO_MIN
+                    ? 'faltan repostajes por registrar entre este y el anterior'
+                    : 'revisa los km o los litros'))
             : 'consumo no calculable'}</div>
         </div>
         <button class="row-del" data-del="${esc(f.id)}">Eliminar</button>
@@ -919,7 +971,8 @@ function renderFuel() {
   }
 
   /* --- gráficas --- */
-  const consArr = fuel.filter(f => cons.has(f.id)).map(f => ({ v: cons.get(f.id), date: f.date }));
+  const consArr = fuel.filter(f => cons.has(f.id) && cons.get(f.id).ok)
+                      .map(f => ({ v: cons.get(f.id).l100, date: f.date }));
   const maxCons = Math.max(...consArr.map(c => c.v), 1);
   $('consBars').innerHTML = consArr.length
     ? consArr.map(c => `
