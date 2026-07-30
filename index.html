@@ -577,7 +577,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.9.0';
+const APP_VERSION = 'v1.9.1';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -836,8 +836,14 @@ function parseRecibo(texto) {
   // --- fecha: "Fecha: 27-07-2026" ---
   const mf = t.match(/fecha\s*[:;.]?\s*(\d{1,2})\s*[-\/.]\s*(\d{1,2})\s*[-\/.]\s*(\d{4})/i);
   if (mf) {
-    const [, d, m, y] = mf;
-    r.date = y + '-' + m.padStart(2, '0') + '-' + d.padStart(2, '0');
+    const d = parseInt(mf[1], 10), m = parseInt(mf[2], 10), y = parseInt(mf[3], 10);
+    // El OCR confunde 0 con 8 en papel térmico y saca días/meses imposibles
+    // (86, mes 87). Si no es una fecha válida, mejor no ponerla y avisar.
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 2000 && y <= 2100) {
+      r.date = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    } else {
+      r.avisos.push('no he podido leer bien la fecha, ponla a mano');
+    }
   }
 
   // --- kilómetros: "Kilómetros: 186129" ---

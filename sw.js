@@ -1,4 +1,4 @@
-const CACHE = 'flota-v11';
+const CACHE = 'flota-v12';
 const ASSETS = ['./', './index.html', './manifest.json', './flota-icon.svg',
   './flota-192.png', './flota-512.png', './flota-180.png'];
 
