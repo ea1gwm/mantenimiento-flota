@@ -145,6 +145,8 @@
   .tag { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px;
          background:oklch(0.93 0.03 150); color:oklch(0.4 0.1 150); margin-left:6px; }
   .tag.part { background:oklch(0.94 0.02 80); color:oklch(0.5 0.02 80); }
+  .tag.aparte { background:oklch(0.93 0.05 60); color:oklch(0.45 0.13 55); }
+  .fuel-nota { font-size:12px; color:oklch(0.45 0.06 60); font-style:italic; margin-top:2px; }
 
   /* ---- lectura del recibo (OCR) ---- */
   .ocr-box { margin-top:8px; padding:10px 12px; border-radius:9px; font-size:12px; line-height:1.5;
@@ -434,6 +436,17 @@
             El consumo solo se calcula entre depósitos llenos: si no llenaste, desmárcalo
             y sus litros se suman al siguiente lleno.
           </div>
+          <label class="check">
+            <input type="checkbox" id="gOtroPago">
+            Pagado fuera de la tarjeta
+          </label>
+          <div class="hint" style="font-size:11px; margin-top:-6px;">
+            Márcalo si la tarjeta llegó al límite y pagaste por otro medio. Se registra
+            igual (km y consumo cuentan), pero no descuenta del límite de la tarjeta.
+          </div>
+          <label class="field">ANOTACIÓN <span class="hint">— opcional (efectivo, tarjeta personal…)</span>
+            <input id="gNota" placeholder="Nota">
+          </label>
           <label class="field">FOTO DEL RECIBO <span class="hint">— opcional</span>
             <input type="file" id="gFoto" accept="image/*" capture="environment"
                    style="font-size:12px; padding:7px;">
@@ -524,7 +537,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.5.0';
+const APP_VERSION = 'v1.6.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -1277,10 +1290,12 @@ function renderFuel() {
           <div class="fuel-top">
             <span class="fuel-date">${esc(fmtDate(f.date))}${f.lleno
               ? '<span class="tag">LLENO</span>'
-              : '<span class="tag part">PARCIAL</span>'}</span>
+              : '<span class="tag part">PARCIAL</span>'}${f.pago === 'otro'
+              ? '<span class="tag aparte">PAGADO APARTE</span>' : ''}</span>
             <span class="fuel-imp">${imp ? fmtDec(imp, 2) + ' €' : ''}</span>
           </div>
           <div class="fuel-sub">${partes.join(' · ')}</div>
+          ${f.nota ? '<div class="fuel-nota">' + esc(f.nota) + '</div>' : ''}
           <div class="fuel-cons${c ? (c.ok ? '' : ' warn') : ' na'}">${c
             ? (c.ok
                 ? fmtDec(c.l100, 2) + ' l/100 km'
@@ -1378,14 +1393,21 @@ function renderMes() {
   const ahora = new Date();
   const ym = ahora.getFullYear() + '-' + String(ahora.getMonth() + 1).padStart(2, '0');
   const delMes = sortedFuel().filter(f => (f.date || '').slice(0, 7) === ym);
-  const gasto = delMes.reduce((a, f) => a + (num(f.importe) || 0), 0);
+  // Solo lo pagado con la tarjeta cuenta para el límite; lo pagado aparte
+  // (cuando la tarjeta llegó al tope) se registra pero no descuenta.
+  const conTarjeta = delMes.filter(f => f.pago !== 'otro');
+  const aparte = delMes.filter(f => f.pago === 'otro');
+  const gasto = conTarjeta.reduce((a, f) => a + (num(f.importe) || 0), 0);
+  const gastoAparte = aparte.reduce((a, f) => a + (num(f.importe) || 0), 0);
   const litros = delMes.reduce((a, f) => a + (num(f.litros) || 0), 0);
 
-  $('mesL').textContent = 'Gasto en ' + MESES_LARGO[ahora.getMonth()];
+  $('mesL').textContent = 'Gasto con tarjeta en ' + MESES_LARGO[ahora.getMonth()];
   $('mesBig').textContent = fmtDec(gasto, 2) + ' €';
-  $('mesSub').textContent = delMes.length
+  $('mesSub').innerHTML = (delMes.length
     ? delMes.length + (delMes.length === 1 ? ' repostaje' : ' repostajes') + ' · ' + fmtDec(litros, 2) + ' l'
-    : 'Aún no has repostado este mes';
+    : 'Aún no has repostado este mes')
+    + (gastoAparte ? '<br><span style="color:oklch(0.5 0.05 60)">+ ' + fmtDec(gastoAparte, 2)
+        + ' € pagado aparte (fuera de la tarjeta)</span>' : '');
 
   const limite = num(cur.fuelLimit);
   const bar = $('mesBar'), rem = $('mesRem'), lim = $('mesLim');
@@ -1587,19 +1609,24 @@ $('btnAddFuel').onclick = async () => {
 
   cur.fuel = cur.fuel || [];
   const estacion = $('gEstacion').value.trim();
+  const otroPago = $('gOtroPago').checked;
   cur.fuel.push(stamp({
     id, date,
     km: normKm($('gKm').value),
     litros, importe,
     estacion,
     lleno: $('gLleno').checked,
+    pago: otroPago ? 'otro' : 'tarjeta',
+    nota: $('gNota').value.trim(),
     foto: !!fotoPendiente
   }));
-  logChange('repostaje', fmtDate(date) + (estacion ? ' · ' + estacion : ''));
+  logChange('repostaje', fmtDate(date) + (estacion ? ' · ' + estacion : '')
+    + (otroPago ? ' (pagado aparte)' : ''));
   persist(); Sync.push();
 
   $('gDate').value = ''; $('gKm').value = ''; $('gLitros').value = '';
   $('gImporte').value = ''; $('gFoto').value = ''; $('gLleno').checked = true;
+  $('gOtroPago').checked = false; $('gNota').value = '';
   fotoPendiente = null; $('gFotoPrev').innerHTML = '';
   $('gEstacion').value = '';
   limpiarMarcas();
