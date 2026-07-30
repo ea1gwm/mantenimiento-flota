@@ -465,8 +465,8 @@
           <label class="field">ANOTACIÓN <span class="hint">— opcional (efectivo, tarjeta personal…)</span>
             <input id="gNota" placeholder="Nota">
           </label>
-          <label class="field">FOTO DEL RECIBO <span class="hint">— opcional</span>
-            <input type="file" id="gFoto" accept="image/*" capture="environment"
+          <label class="field">FOTO DEL RECIBO <span class="hint">— opcional (cámara o galería)</span>
+            <input type="file" id="gFoto" accept="image/*"
                    style="font-size:12px; padding:7px;">
           </label>
           <div id="gFotoPrev"></div>
@@ -575,7 +575,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.8.0';
+const APP_VERSION = 'v1.8.1';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
