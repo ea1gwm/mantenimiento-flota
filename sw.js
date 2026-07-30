@@ -1,5 +1,6 @@
-const CACHE = 'flota-v10';
-const ASSETS = ['./', './index.html', './manifest.json', './flota-icon.svg'];
+const CACHE = 'flota-v11';
+const ASSETS = ['./', './index.html', './manifest.json', './flota-icon.svg',
+  './flota-192.png', './flota-512.png', './flota-180.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
