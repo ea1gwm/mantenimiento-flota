@@ -236,6 +236,16 @@
   .log-row b { color:oklch(0.3 0.01 80); }
   .log-row .when { color:oklch(0.6 0.01 80); }
 
+  /* ---- informe ---- */
+  .rep-periodos { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .rep-per { padding:8px 14px; border-radius:8px; border:1px solid oklch(0.88 0.01 80);
+             background:white; color:oklch(0.4 0.01 80); font-size:13px; font-weight:600; cursor:pointer; }
+  .rep-per.on { border-color:oklch(0.5 0.14 230); background:oklch(0.5 0.14 230); color:white; }
+  .rep-resumen { background:oklch(0.97 0.005 80); border-radius:12px; padding:14px 16px;
+                 font-size:13px; color:oklch(0.35 0.01 80); line-height:1.7; margin-bottom:16px; }
+  .rep-resumen b { color:oklch(0.2 0.01 80); }
+  .rep-acciones { display:flex; gap:10px; flex-wrap:wrap; }
+
   .hide { display:none !important; }
 
   @media (max-width: 900px) {
@@ -264,6 +274,7 @@
     <button class="sync-btn hide" id="btnSyncDisconnect">Desconectar</button>
     <span class="grow"></span>
     <span class="sync-info hide" id="syncInfo"></span>
+    <button class="sync-btn" id="btnReport">📄 Informe</button>
     <button class="sync-btn" id="btnLog">Cambios</button>
     <button class="sync-btn" id="btnTrash">Papelera</button>
   </div>
@@ -533,6 +544,26 @@
   </div>
 </div>
 
+<!-- informe -->
+<div class="modal-bg hide" id="reportModal">
+  <div class="modal">
+    <button class="modal-x" id="reportX">&times;</button>
+    <h3>Informe del vehículo</h3>
+    <div class="modal-sub" id="reportSub">Un resumen con revisiones y repostajes, para guardar o enviar.</div>
+    <div class="rep-periodos" id="repPeriodos">
+      <button class="rep-per on" data-per="mes">Este mes</button>
+      <button class="rep-per" data-per="ano">Este año</button>
+      <button class="rep-per" data-per="todo">Todo el historial</button>
+    </div>
+    <div class="rep-resumen" id="repResumen"></div>
+    <div class="rep-acciones">
+      <button class="primary" id="btnRepVer" style="flex:1;">Ver</button>
+      <button class="sync-btn" id="btnRepDescargar">Descargar HTML</button>
+      <button class="sync-btn blue" id="btnRepCompartir">Enviar</button>
+    </div>
+  </div>
+</div>
+
 <!-- registro de cambios -->
 <div class="modal-bg hide" id="logModal">
   <div class="modal">
@@ -544,7 +575,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.7.0';
+const APP_VERSION = 'v1.8.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -1984,6 +2015,178 @@ function fmtCuando(at) {
   return fmtDate(d.toISOString().slice(0, 10)) + ' ' + h + ':' + m;
 }
 
+/* ==========================================================
+   INFORME EXPORTABLE (HTML)
+   Resumen del vehículo por periodo (mes, año o todo), para
+   descargar o enviar. Es un HTML propio y autónomo.
+========================================================== */
+let repPeriodo = 'mes';
+
+function enPeriodo(dateIso, modo) {
+  if (modo === 'todo') return true;
+  const ahora = new Date();
+  if (modo === 'ano') return (dateIso || '').slice(0, 4) === String(ahora.getFullYear());
+  const ym = ahora.getFullYear() + '-' + String(ahora.getMonth() + 1).padStart(2, '0');
+  return (dateIso || '').slice(0, 7) === ym;   // mes
+}
+function etiquetaPeriodo(modo) {
+  const ahora = new Date();
+  if (modo === 'ano') return 'año ' + ahora.getFullYear();
+  if (modo === 'todo') return 'historial completo';
+  return MESES_LARGO[ahora.getMonth()] + ' de ' + ahora.getFullYear();
+}
+
+function resumenInforme(modo) {
+  const recs = sortedRecords().filter(r => enPeriodo(r.date, modo));
+  const reps = sortedFuel().filter(f => enPeriodo(f.date, modo));
+  const cons = calcConsumos();   // sobre todo el histórico, para no cortar tramos
+
+  const litros = reps.reduce((a, f) => a + (num(f.litros) || 0), 0);
+  const gastoTarjeta = reps.filter(f => f.pago !== 'otro').reduce((a, f) => a + (num(f.importe) || 0), 0);
+  const gastoAparte = reps.filter(f => f.pago === 'otro').reduce((a, f) => a + (num(f.importe) || 0), 0);
+  const gastoTotal = gastoTarjeta + gastoAparte;
+
+  // km recorridos en el periodo: de todos los puntos con km en el periodo
+  const pts = puntosKm().filter(p => enPeriodo(p.date, modo));
+  const kmRec = pts.length >= 2 ? pts[pts.length - 1].km - pts[0].km : null;
+
+  // consumo medio del periodo: tramos válidos cuya cita cae en el periodo
+  const tramos = reps.filter(f => cons.get(f.id) && cons.get(f.id).ok).map(f => cons.get(f.id));
+  let consumo = null;
+  if (tramos.length) {
+    const km = tramos.reduce((a, c) => a + c.dist, 0);
+    const l = tramos.reduce((a, c) => a + c.litros, 0);
+    if (km > 0) consumo = l / km * 100;
+  }
+  return {
+    recs, reps, litros, gastoTarjeta, gastoAparte, gastoTotal, kmRec, consumo, cons,
+    precio: (litros && gastoTotal) ? gastoTotal / litros : null
+  };
+}
+
+function renderReportResumen(modo) {
+  const cur = currentVehicle();
+  const r = resumenInforme(modo);
+  const filas = [
+    ['Vehículo', esc(cur.plate)],
+    ['Periodo', etiquetaPeriodo(modo)],
+    ['Revisiones', r.recs.length],
+    ['Repostajes', r.reps.length],
+    r.kmRec != null ? ['Km recorridos', fmtNum(r.kmRec) + ' km'] : null,
+    r.consumo ? ['Consumo medio', fmtDec(r.consumo, 2) + ' l/100 km'] : null,
+    r.litros ? ['Litros', fmtDec(r.litros, 2) + ' l'] : null,
+    ['Gasto con tarjeta', fmtDec(r.gastoTarjeta, 2) + ' €'],
+    r.gastoAparte ? ['Pagado aparte', fmtDec(r.gastoAparte, 2) + ' €'] : null,
+    ['Gasto total', fmtDec(r.gastoTotal, 2) + ' €']
+  ].filter(Boolean);
+  $('repResumen').innerHTML = filas.map(([k, v]) => `${k}: <b>${v}</b>`).join('<br>');
+}
+
+function nombreInforme(modo) {
+  const cur = currentVehicle();
+  const ahora = new Date();
+  const suf = modo === 'todo' ? 'historial'
+    : modo === 'ano' ? String(ahora.getFullYear())
+    : ahora.getFullYear() + '-' + String(ahora.getMonth() + 1).padStart(2, '0');
+  return 'Flota_' + (cur.plate || 'vehiculo').replace(/[^A-Z0-9]/gi, '') + '_' + suf + '.html';
+}
+
+function generarInformeHTML(modo) {
+  const cur = currentVehicle();
+  const r = resumenInforme(modo);
+  const hoy = fmtDate(new Date().toISOString().slice(0, 10));
+
+  const tarjeta = (label, valor) =>
+    `<div class="k"><div class="kl">${label}</div><div class="kv">${valor}</div></div>`;
+
+  const kpis = [
+    r.kmRec != null ? tarjeta('Km recorridos', fmtNum(r.kmRec) + ' km') : '',
+    r.consumo ? tarjeta('Consumo medio', fmtDec(r.consumo, 2) + ' l/100km') : '',
+    tarjeta('Gasto con tarjeta', fmtDec(r.gastoTarjeta, 2) + ' €'),
+    r.gastoAparte ? tarjeta('Pagado aparte', fmtDec(r.gastoAparte, 2) + ' €') : '',
+    tarjeta('Gasto total', fmtDec(r.gastoTotal, 2) + ' €'),
+    r.litros ? tarjeta('Litros', fmtDec(r.litros, 2) + ' l') : '',
+    r.precio ? tarjeta('Precio medio', fmtDec(r.precio, 3) + ' €/l') : '',
+    tarjeta('Repostajes', r.reps.length),
+    tarjeta('Revisiones', r.recs.length)
+  ].join('');
+
+  const filasRep = [...r.reps].reverse().map(f => {
+    const l = num(f.litros), imp = num(f.importe), c = r.cons.get(f.id);
+    return `<tr>
+      <td>${esc(fmtDate(f.date))}</td>
+      <td class="n">${hasKm(f) ? fmtNum(f.km) : '—'}</td>
+      <td class="n">${l ? fmtDec(l, 2) : '—'}</td>
+      <td class="n">${(l && imp) ? fmtDec(imp / l, 3) : '—'}</td>
+      <td class="n">${imp ? fmtDec(imp, 2) + ' €' : '—'}</td>
+      <td class="n">${c && c.ok ? fmtDec(c.l100, 2) : '—'}</td>
+      <td>${esc(f.estacion || '')}${f.pago === 'otro' ? ' <span class="ap">(pagado aparte)</span>' : ''}${f.nota ? '<br><span class="nt">' + esc(f.nota) + '</span>' : ''}</td>
+    </tr>`;
+  }).join('');
+
+  const filasRev = [...r.recs].reverse().map(x => `<tr>
+      <td>${esc(fmtDate(x.date))}</td>
+      <td class="n">${hasKm(x) ? fmtNum(x.km) : '—'}</td>
+      <td>${esc(x.taller || '')}</td>
+      <td>${esc(x.reparacion || '')}${x.oilIntervalKm ? ' <span class="ac">· cambio de aceite</span>' : ''}</td>
+    </tr>`).join('');
+
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mantenimiento ${esc(cur.plate)} — ${etiquetaPeriodo(modo)}</title>
+<style>
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif; color:#222; margin:0; padding:28px; background:#fff; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:24px; margin:0 0 2px; }
+  .sub { color:#666; font-size:14px; margin-bottom:20px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:26px; }
+  .k { border:1px solid #e6e4e0; border-radius:12px; padding:12px 14px; }
+  .kl { font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#888; font-weight:600; }
+  .kv { font-size:21px; font-weight:700; margin-top:3px; }
+  h2 { font-size:16px; margin:24px 0 10px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid #eee; vertical-align:top; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#888; }
+  td.n, th.n { text-align:right; white-space:nowrap; }
+  .ap { color:#b26a00; font-weight:600; }
+  .ac { color:#3a6; }
+  .nt { color:#888; font-style:italic; }
+  .foot { margin-top:30px; color:#999; font-size:12px; border-top:1px solid #eee; padding-top:12px; }
+  @media print { body { padding:0; } }
+</style></head><body><div class="wrap">
+  <h1>Mantenimiento — ${esc(cur.plate)}</h1>
+  <div class="sub">${etiquetaPeriodo(modo).replace(/^./, c => c.toUpperCase())} · generado el ${hoy}</div>
+  <div class="kpis">${kpis}</div>
+  ${r.reps.length ? `<h2>Repostajes (${r.reps.length})</h2>
+  <table><thead><tr><th>Fecha</th><th class="n">Km</th><th class="n">Litros</th><th class="n">€/l</th><th class="n">Importe</th><th class="n">l/100</th><th>Gasolinera</th></tr></thead>
+  <tbody>${filasRep}</tbody></table>` : ''}
+  ${r.recs.length ? `<h2>Revisiones (${r.recs.length})</h2>
+  <table><thead><tr><th>Fecha</th><th class="n">Km</th><th>Taller</th><th>Reparación</th></tr></thead>
+  <tbody>${filasRev}</tbody></table>` : ''}
+  ${(!r.reps.length && !r.recs.length) ? '<p style="color:#888">No hay datos en este periodo.</p>' : ''}
+  <div class="foot">Mantenimiento de flota · ${APP_VERSION} · ${esc(cur.plate)}</div>
+</div></body></html>`;
+}
+
+function descargarInforme(html, nombre) {
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+async function compartirInforme(html, nombre) {
+  const file = new File([html], nombre, { type: 'text/html' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Informe de mantenimiento' }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  descargarInforme(html, nombre);
+  toast('Compartir no disponible aquí: se ha descargado el archivo');
+}
+
 function updateSyncUI() {
   const nB = borrados().length;
   $('btnTrash').textContent = nB ? 'Papelera (' + nB + ')' : 'Papelera';
@@ -2004,6 +2207,30 @@ $('trashX').onclick = () => $('trashModal').classList.add('hide');
 $('logX').onclick = () => $('logModal').classList.add('hide');
 $('trashModal').onclick = e => { if (e.target === $('trashModal')) $('trashModal').classList.add('hide'); };
 $('logModal').onclick = e => { if (e.target === $('logModal')) $('logModal').classList.add('hide'); };
+
+/* informe */
+$('btnReport').onclick = () => {
+  if (!currentVehicle().id) { toast('Añade un vehículo primero.'); return; }
+  renderReportResumen(repPeriodo);
+  $('repPeriodos').querySelectorAll('.rep-per').forEach(b => b.classList.toggle('on', b.dataset.per === repPeriodo));
+  $('reportModal').classList.remove('hide');
+};
+$('reportX').onclick = () => $('reportModal').classList.add('hide');
+$('reportModal').onclick = e => { if (e.target === $('reportModal')) $('reportModal').classList.add('hide'); };
+$('repPeriodos').querySelectorAll('.rep-per').forEach(b => {
+  b.onclick = () => {
+    repPeriodo = b.dataset.per;
+    $('repPeriodos').querySelectorAll('.rep-per').forEach(x => x.classList.toggle('on', x === b));
+    renderReportResumen(repPeriodo);
+  };
+});
+$('btnRepVer').onclick = () => {
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(generarInformeHTML(repPeriodo)); w.document.close(); }
+  else toast('El navegador ha bloqueado la ventana. Usa Descargar.');
+};
+$('btnRepDescargar').onclick = () => descargarInforme(generarInformeHTML(repPeriodo), nombreInforme(repPeriodo));
+$('btnRepCompartir').onclick = () => compartirInforme(generarInformeHTML(repPeriodo), nombreInforme(repPeriodo));
 
 /* ---------- arranque ---------- */
 $('ver').textContent = APP_VERSION;
