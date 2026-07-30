@@ -1,4 +1,4 @@
-const CACHE = 'flota-v5';
+const CACHE = 'flota-v6';
 const ASSETS = ['./', './index.html', './manifest.json', './flota-icon.svg'];
 
 self.addEventListener('install', e => {

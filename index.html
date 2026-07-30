@@ -93,6 +93,25 @@
   .oil-rem { font-size:16px; font-weight:700; margin-top:8px; color:oklch(0.3 0.1 230); }
   .oil-rem.late { color:oklch(0.5 0.18 30); }
 
+  /* ---- gasto del mes ---- */
+  .mes { background:oklch(0.95 0.04 150); border:1px solid oklch(0.85 0.06 150);
+         border-radius:14px; padding:18px 20px; }
+  .mes-l { font-size:11px; font-weight:600; color:oklch(0.4 0.09 150);
+           text-transform:uppercase; letter-spacing:0.03em; }
+  .mes-big { font-size:32px; font-weight:800; color:oklch(0.32 0.11 150); margin-top:2px; letter-spacing:-0.01em; }
+  .mes-sub { font-size:13px; color:oklch(0.4 0.05 150); margin-top:2px; }
+  .mes-bar { height:10px; border-radius:6px; background:oklch(0.9 0.03 150); overflow:hidden; margin-top:12px; }
+  .mes-bar > div { height:100%; border-radius:6px; background:oklch(0.6 0.14 150); transition:width .3s; }
+  .mes-rem { font-size:15px; font-weight:700; margin-top:8px; color:oklch(0.35 0.11 150); }
+  .mes-rem.over { color:oklch(0.5 0.18 30); }
+  .mes-bar.over > div { background:oklch(0.6 0.19 30); }
+  .mes-lim { display:flex; align-items:center; gap:8px; font-size:12px; color:oklch(0.4 0.05 150); margin-top:12px; flex-wrap:wrap; }
+  .mes-lim input { padding:6px 9px; border-radius:7px; border:1px solid oklch(0.78 0.06 150);
+                   font-size:13px; width:100px; background:white; color:inherit; }
+  .mes-lim button { padding:6px 11px; border-radius:7px; border:none; background:oklch(0.55 0.12 150);
+                    color:white; font-size:12px; font-weight:600; cursor:pointer; }
+  .mes-lim a { color:oklch(0.45 0.09 150); cursor:pointer; text-decoration:underline; }
+
   .hist { max-height:420px; overflow-y:auto; display:flex; flex-direction:column; }
   .row { display:flex; flex-direction:column; gap:4px; padding:12px 0;
          border-bottom:1px solid oklch(0.93 0.008 80); }
@@ -378,6 +397,15 @@
 
     <div class="col">
 
+      <div class="mes" id="mesCard">
+        <div class="mes-l" id="mesL">Gasto este mes</div>
+        <div class="mes-big" id="mesBig">—</div>
+        <div class="mes-sub" id="mesSub"></div>
+        <div class="mes-bar hide" id="mesBar"><div style="width:0"></div></div>
+        <div class="mes-rem hide" id="mesRem"></div>
+        <div class="mes-lim" id="mesLim"></div>
+      </div>
+
       <div class="card">
         <div class="card-t" style="margin-bottom:14px;">Registrar repostaje</div>
         <div class="form">
@@ -496,7 +524,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.4.0';
+const APP_VERSION = 'v1.5.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -1336,6 +1364,68 @@ function renderFuel() {
     : '<div class="empty">Sin litros e importe registrados.</div>';
 }
 
+/* ==========================================================
+   GASTO DEL MES
+   Lo repostado en el mes en curso, para vigilar el límite de
+   la tarjeta sin tener que llamar a la gasolinera. El límite
+   se guarda en el vehículo, así que se sincroniza.
+========================================================== */
+const MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio',
+  'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+function renderMes() {
+  const cur = currentVehicle();
+  const ahora = new Date();
+  const ym = ahora.getFullYear() + '-' + String(ahora.getMonth() + 1).padStart(2, '0');
+  const delMes = sortedFuel().filter(f => (f.date || '').slice(0, 7) === ym);
+  const gasto = delMes.reduce((a, f) => a + (num(f.importe) || 0), 0);
+  const litros = delMes.reduce((a, f) => a + (num(f.litros) || 0), 0);
+
+  $('mesL').textContent = 'Gasto en ' + MESES_LARGO[ahora.getMonth()];
+  $('mesBig').textContent = fmtDec(gasto, 2) + ' €';
+  $('mesSub').textContent = delMes.length
+    ? delMes.length + (delMes.length === 1 ? ' repostaje' : ' repostajes') + ' · ' + fmtDec(litros, 2) + ' l'
+    : 'Aún no has repostado este mes';
+
+  const limite = num(cur.fuelLimit);
+  const bar = $('mesBar'), rem = $('mesRem'), lim = $('mesLim');
+
+  if (limite) {
+    const pct = Math.min(100, Math.round(gasto / limite * 100));
+    const restante = limite - gasto;
+    const pasado = restante < 0;
+    bar.classList.remove('hide'); rem.classList.remove('hide');
+    bar.classList.toggle('over', pasado);
+    bar.firstElementChild.style.width = pct + '%';
+    rem.classList.toggle('over', pasado);
+    rem.textContent = pasado
+      ? '¡Límite superado en ' + fmtDec(-restante, 2) + ' €!'
+      : 'Te quedan ' + fmtDec(restante, 2) + ' € de ' + fmtDec(limite, 2) + ' €';
+    lim.innerHTML = '<a id="mesEdit">Cambiar límite</a> · <a id="mesClear">quitar</a>';
+    $('mesEdit').onclick = pedirLimite;
+    $('mesClear').onclick = () => { setLimite(null); };
+  } else {
+    bar.classList.add('hide'); rem.classList.add('hide');
+    lim.innerHTML = 'Límite mensual de la tarjeta: '
+      + '<input type="number" id="mesLimInput" placeholder="€" min="0" step="10">'
+      + '<button id="mesLimBtn">Fijar</button>';
+    $('mesLimBtn').onclick = () => setLimite(num($('mesLimInput').value));
+    $('mesLimInput').onkeydown = e => { if (e.key === 'Enter') setLimite(num($('mesLimInput').value)); };
+  }
+}
+
+function pedirLimite() {
+  const v = prompt('Límite mensual de la tarjeta, en €:', num(currentVehicle().fuelLimit) || '');
+  if (v === null) return;
+  setLimite(num(v));
+}
+function setLimite(valor) {
+  const cur = currentVehicle();
+  cur.fuelLimit = valor || null;
+  stamp(cur);
+  persist(); Sync.push(); renderMes();
+}
+
 function render() {
   renderTabs();
   renderKpis();
@@ -1343,6 +1433,7 @@ function render() {
   renderHist();
   renderCharts();
   renderFuel();
+  renderMes();
   updateSyncUI();
 }
 
