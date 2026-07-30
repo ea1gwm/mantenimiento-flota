@@ -11,6 +11,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="flota-icon.svg" type="image/svg+xml">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: oklch(0.98 0.004 80); color: oklch(0.22 0.01 80);
@@ -160,6 +163,54 @@
   .legend { display:flex; gap:14px; font-size:11px; color:oklch(0.5 0.01 80); margin-top:6px; }
   .legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; }
 
+  /* ---- sincronización ---- */
+  .sync { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px;
+          padding:10px 14px; background:white; border:1px solid oklch(0.92 0.008 80); border-radius:12px; }
+  .sync-badge { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600;
+                padding:5px 11px; border-radius:20px; background:oklch(0.94 0.006 80); color:oklch(0.45 0.01 80); }
+  .sync-badge i { width:8px; height:8px; border-radius:50%; background:oklch(0.7 0.01 80); }
+  .sync-badge.on    { background:oklch(0.94 0.05 150); color:oklch(0.38 0.1 150); }
+  .sync-badge.on i  { background:oklch(0.6 0.15 150); }
+  .sync-badge.wait  { background:oklch(0.95 0.05 90); color:oklch(0.45 0.1 80); }
+  .sync-badge.wait i{ background:oklch(0.7 0.14 90); }
+  .sync-badge.err   { background:oklch(0.95 0.04 30); color:oklch(0.5 0.15 30); }
+  .sync-badge.err i { background:oklch(0.65 0.18 30); }
+  .sync input { padding:8px 11px; border-radius:8px; border:1px solid oklch(0.85 0.01 80);
+                font-size:14px; width:150px; color:inherit; background:white; }
+  .sync .grow { flex:1; }
+  .sync-btn { padding:8px 14px; border-radius:8px; border:1px solid oklch(0.85 0.01 80);
+              background:white; color:oklch(0.35 0.01 80); font-size:13px; font-weight:600; cursor:pointer; }
+  .sync-btn.blue { background:oklch(0.5 0.14 230); border-color:oklch(0.5 0.14 230); color:white; }
+  .sync-info { font-size:12px; color:oklch(0.5 0.01 80); }
+  .sync-info b { color:oklch(0.35 0.01 80); }
+
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+           background:oklch(0.28 0.02 230); color:white; padding:11px 18px; border-radius:10px;
+           font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,0.25); z-index:120; max-width:90vw;
+           opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(-4px); }
+
+  /* ---- papelera / diálogos ---- */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex;
+              align-items:center; justify-content:center; z-index:110; padding:16px; }
+  .modal { background:white; border-radius:16px; max-width:560px; width:100%; max-height:85vh;
+           overflow-y:auto; padding:22px; }
+  .modal h3 { margin:0 0 4px; font-size:18px; }
+  .modal-sub { font-size:13px; color:oklch(0.5 0.01 80); margin-bottom:16px; }
+  .modal-x { float:right; border:none; background:none; font-size:24px; cursor:pointer;
+             color:oklch(0.5 0.01 80); line-height:1; }
+  .trash-row { display:flex; gap:10px; align-items:flex-start; padding:11px 0;
+               border-bottom:1px solid oklch(0.93 0.008 80); }
+  .trash-main { flex:1; min-width:0; }
+  .trash-t { font-size:13px; font-weight:700; }
+  .trash-s { font-size:12px; color:oklch(0.5 0.01 80); margin-top:2px; }
+  .trash-tag { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px;
+               background:oklch(0.94 0.02 80); color:oklch(0.5 0.02 80); margin-right:6px; }
+  .log-row { font-size:12px; color:oklch(0.45 0.01 80); padding:7px 0;
+             border-bottom:1px solid oklch(0.95 0.005 80); }
+  .log-row b { color:oklch(0.3 0.01 80); }
+  .log-row .when { color:oklch(0.6 0.01 80); }
+
   .hide { display:none !important; }
 
   @media (max-width: 900px) {
@@ -179,6 +230,17 @@
       <div class="sub">Revisiones, repostajes y evolución por vehículo</div>
     </div>
     <div class="ver" id="ver"></div>
+  </div>
+
+  <div class="sync">
+    <span class="sync-badge" id="syncBadge"><i></i><span id="syncTxt">Local</span></span>
+    <input id="syncCode" placeholder="Código compartido" maxlength="24">
+    <button class="sync-btn blue" id="btnSyncConnect">Sincronizar</button>
+    <button class="sync-btn hide" id="btnSyncDisconnect">Desconectar</button>
+    <span class="grow"></span>
+    <span class="sync-info hide" id="syncInfo"></span>
+    <button class="sync-btn" id="btnLog">Cambios</button>
+    <button class="sync-btn" id="btnTrash">Papelera</button>
   </div>
 
   <div class="tabs">
@@ -413,9 +475,42 @@
   </div>
 </div>
 
+<!-- papelera -->
+<div class="modal-bg hide" id="trashModal">
+  <div class="modal">
+    <button class="modal-x" id="trashX">&times;</button>
+    <h3>Papelera</h3>
+    <div class="modal-sub">Lo que se borra se guarda aquí y se puede restaurar. Se sincroniza con los demás.</div>
+    <div id="trashList"></div>
+  </div>
+</div>
+
+<!-- registro de cambios -->
+<div class="modal-bg hide" id="logModal">
+  <div class="modal">
+    <button class="modal-x" id="logX">&times;</button>
+    <h3>Últimos cambios</h3>
+    <div class="modal-sub">Quién ha hecho qué, entre todos los dispositivos.</div>
+    <div id="logList"></div>
+  </div>
+</div>
+
 <script>
-const APP_VERSION = 'v1.3.0';
+const APP_VERSION = 'v1.4.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
+const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
+const CODE_KEY    = 'flota_sync_code';
+const USER_KEY    = 'flota_sync_user';
+const DEVICE_KEY  = 'flota_device_id';
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBWxA5V6YBiMfTs-TbleGnRCDrvQjiF1CI",
+  authDomain: "mantenimiento-flota-8254.firebaseapp.com",
+  projectId: "mantenimiento-flota-8254",
+  storageBucket: "mantenimiento-flota-8254.firebasestorage.app",
+  messagingSenderId: "987585816333",
+  appId: "1:987585816333:web:6a12db8ad93e48eabb7244"
+};
 
 /* ---------- datos iniciales ----------
    [fecha, taller, km (null = desconocido), reparación, intervalo aceite] */
@@ -811,17 +906,56 @@ let selectedId = vehicles.length ? vehicles[0].id : null;
 let currentKmInputs = {};
 let fotoPendiente = null;   // dataURL de la foto elegida, aún sin guardar
 
-function persist() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles)); } catch (e) {}
+// Registro de cambios: se guarda quién borra/añade qué, para poder mirar
+// atrás y para avisar al resto. lastChange dispara el aviso en los demás.
+let flotaMeta = loadMeta();
+function loadMeta() {
+  try { const m = JSON.parse(localStorage.getItem(META_KEY)); if (m && m.log) return m; } catch (e) {}
+  return { log: [], lastChange: null };
 }
+
+// Identidad del dispositivo (para no avisarse a uno mismo) y nombre de quien
+// usa este equipo (para que el resto vea quién hizo cada cosa).
+const deviceId = (() => {
+  let d = localStorage.getItem(DEVICE_KEY);
+  if (!d) { d = 'd' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(DEVICE_KEY, d); }
+  return d;
+})();
+function userName() { return localStorage.getItem(USER_KEY) || ''; }
+
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles));
+    localStorage.setItem(META_KEY, JSON.stringify(flotaMeta));
+  } catch (e) {}
+}
+
+// Marca de tiempo en cada cambio: la usa la fusión para saber qué versión
+// es la más nueva cuando dos dispositivos tocan lo mismo.
+function stamp(item) { item.updatedAt = Date.now(); return item; }
+
+// Anota un cambio en el registro (últimos 60) y deja constancia de quién
+// fue, para que el resto reciba el aviso.
+function logChange(action, label) {
+  const entry = { at: Date.now(), by: userName() || 'Alguien', deviceId, action, label };
+  flotaMeta.log.unshift(entry);
+  flotaMeta.log = flotaMeta.log.slice(0, 60);
+  flotaMeta.lastChange = entry;
+}
+
 function currentVehicle() {
   return vehicles.find(v => v.id === selectedId) || vehicles[0] || { id: null, plate: '', records: [], fuel: [] };
 }
+// Los borrados no se quitan del array: se marcan deleted y se filtran aquí.
+// Así se pueden restaurar y el borrado se propaga bien al resto (si se
+// quitaran de verdad, el móvil del compañero los resucitaría al fusionar).
 function sortedRecords() {
-  return [...(currentVehicle().records || [])].sort((a, b) => a.date.localeCompare(b.date));
+  return [...(currentVehicle().records || [])].filter(r => !r.deleted)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 function sortedFuel() {
-  return [...(currentVehicle().fuel || [])].sort((a, b) => a.date.localeCompare(b.date));
+  return [...(currentVehicle().fuel || [])].filter(f => !f.deleted)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /* ---------- pestañas de vehículo ---------- */
@@ -935,9 +1069,12 @@ function renderHist() {
     </div>`).join('');
   $('hist').querySelectorAll('.row-del').forEach(b => {
     b.onclick = () => {
-      if (!confirm('¿Eliminar este registro?')) return;
-      cur.records = cur.records.filter(r => r.id !== b.dataset.id);
-      persist(); render();
+      const rec = cur.records.find(r => r.id === b.dataset.id);
+      if (!rec) return;
+      if (!confirm('¿Enviar este registro a la papelera?')) return;
+      rec.deleted = true; stamp(rec);
+      logChange('borrar-revision', fmtDate(rec.date) + ' · ' + rec.taller);
+      persist(); Sync.push(); render();
     };
   });
 }
@@ -1128,17 +1265,22 @@ function renderFuel() {
       </div>`;
     }).join('');
 
-    // miniaturas (se leen de IndexedDB)
+    // miniaturas: de IndexedDB, y si no está (foto de otro dispositivo) se
+    // baja de la nube y se cachea.
     $('fuelList').querySelectorAll('.fuel-thumb').forEach(async img => {
-      const d = await Fotos.get(img.dataset.foto);
+      let d = await Fotos.get(img.dataset.foto);
+      if (!d) d = await Sync.bajarFoto(img.dataset.foto);
       if (d) { img.src = d; img.onclick = () => verFoto(d); }
     });
     $('fuelList').querySelectorAll('[data-del]').forEach(b => {
-      b.onclick = async () => {
-        if (!confirm('¿Eliminar este repostaje?')) return;
-        await Fotos.del(b.dataset.del);
-        cur.fuel = cur.fuel.filter(f => f.id !== b.dataset.del);
-        persist(); render();
+      b.onclick = () => {
+        const rep = cur.fuel.find(f => f.id === b.dataset.del);
+        if (!rep) return;
+        if (!confirm('¿Enviar este repostaje a la papelera?')) return;
+        // La foto no se borra: si se restaura, sigue ahí.
+        rep.deleted = true; stamp(rep);
+        logChange('borrar-repostaje', fmtDate(rep.date) + (rep.estacion ? ' · ' + rep.estacion : ''));
+        persist(); Sync.push(); render();
       };
     });
   }
@@ -1201,6 +1343,7 @@ function render() {
   renderHist();
   renderCharts();
   renderFuel();
+  updateSyncUI();
 }
 
 /* ---------- cambio de vista ---------- */
@@ -1229,14 +1372,15 @@ $('btnAdd').onclick = () => {
   if (!date || !taller) { showErr('formErr', 'Introduce al menos fecha y taller.'); return; }
   const cur = currentVehicle();
   if (!cur.id) { showErr('formErr', 'Añade primero un vehículo.'); return; }
-  cur.records.push({
+  cur.records.push(stamp({
     id: 'r' + Date.now(),
     date, taller,
     km: normKm($('fKm').value),
     reparacion: $('fRep').value.trim(),
     oilIntervalKm: $('fOil').checked ? (parseInt($('fOilInterval').value, 10) || 20000) : null
-  });
-  persist();
+  }));
+  logChange('revision', fmtDate(date) + ' · ' + taller);
+  persist(); Sync.push();
   $('fDate').value = ''; $('fTaller').value = ''; $('fKm').value = ''; $('fRep').value = '';
   $('fOil').checked = false; $('fOilInterval').value = '20000';
   $('fOilIntervalWrap').classList.add('hide');
@@ -1345,18 +1489,23 @@ $('btnAddFuel').onclick = async () => {
   if (!cur.id) { showErr('fuelErr', 'Añade primero un vehículo.'); return; }
 
   const id = 'g' + Date.now();
-  if (fotoPendiente) { try { await Fotos.put(id, fotoPendiente); } catch (e) {} }
+  if (fotoPendiente) {
+    try { await Fotos.put(id, fotoPendiente); } catch (e) {}
+    Sync.subirFoto(id, fotoPendiente);   // que la vea el resto (si hay conexión)
+  }
 
   cur.fuel = cur.fuel || [];
-  cur.fuel.push({
+  const estacion = $('gEstacion').value.trim();
+  cur.fuel.push(stamp({
     id, date,
     km: normKm($('gKm').value),
     litros, importe,
-    estacion: $('gEstacion').value.trim(),
+    estacion,
     lleno: $('gLleno').checked,
     foto: !!fotoPendiente
-  });
-  persist();
+  }));
+  logChange('repostaje', fmtDate(date) + (estacion ? ' · ' + estacion : ''));
+  persist(); Sync.push();
 
   $('gDate').value = ''; $('gKm').value = ''; $('gLitros').value = '';
   $('gImporte').value = ''; $('gFoto').value = ''; $('gLleno').checked = true;
@@ -1375,9 +1524,10 @@ $('btnConfirmVehicle').onclick = () => {
   const plate = $('newPlate').value.trim().toUpperCase();
   if (!plate) return;
   const id = 'v' + Date.now();
-  vehicles.push({ id, plate, records: [], fuel: [] });
+  vehicles.push(stamp({ id, plate, records: [], fuel: [] }));
   selectedId = id;
-  persist();
+  logChange('vehiculo', plate);
+  persist(); Sync.push();
   setAddingVehicle(false);
   render();
 };
@@ -1392,10 +1542,301 @@ $('oilCur').oninput = () => {
   renderOil();
 };
 
+/* ==========================================================
+   AVISOS
+========================================================== */
+let toastT = null;
+function toast(msg) {
+  let t = $('toastBox');
+  if (!t) { t = document.createElement('div'); t.id = 'toastBox'; t.className = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  requestAnimationFrame(() => t.classList.add('show'));
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+/* ==========================================================
+   SINCRONIZACIÓN
+   Un documento en Firestore por código compartido. Los tres
+   dispositivos (móvil, PC, compañero) leen y escriben el mismo,
+   y cada cambio llega al resto en el momento.
+========================================================== */
+const Sync = {
+  db: null, auth: null, active: false, code: null, unsub: null,
+  aplicando: false, pushT: null, lista: false,
+
+  configurado() { return !!(window.firebase && FIREBASE_CONFIG.apiKey); },
+
+  badge(modo, txt) {
+    const b = $('syncBadge');
+    b.className = 'sync-badge ' + modo;
+    $('syncTxt').textContent = txt;
+  },
+
+  async init() {
+    if (!this.configurado()) { this.badge('', 'Local'); return; }
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      this.db = firebase.firestore();
+      this.auth = firebase.auth();
+      await this.auth.signInAnonymously();
+      this.lista = true;
+      const guardado = localStorage.getItem(CODE_KEY);
+      if (guardado) this.conectar(guardado, true);
+      else this.badge('', 'Local');
+    } catch (e) {
+      console.warn('Firebase init', e);
+      this.badge('err', 'Sin conexión');
+    }
+  },
+
+  ref() { return this.db.collection('flotas').doc(this.code); },
+
+  async conectar(code, silencioso) {
+    code = (code || '').trim().toLowerCase().replace(/\s+/g, '-');
+    if (!code) { alert('Escribe un código para sincronizar.'); return; }
+    if (!this.lista) { alert('Aún conectando con el servidor, espera un momento.'); return; }
+
+    // Nombre de quien usa este equipo, para que el resto sepa quién cambia qué.
+    if (!userName()) {
+      const n = (prompt('¿Cómo te llamas? (aparecerá junto a tus cambios)') || '').trim();
+      if (n) localStorage.setItem(USER_KEY, n);
+    }
+
+    this.code = code;
+    localStorage.setItem(CODE_KEY, code);
+    this.active = true;
+    this.badge('wait', 'Conectando…');
+    $('btnSyncConnect').classList.add('hide');
+    $('btnSyncDisconnect').classList.remove('hide');
+    $('syncCode').value = code;
+
+    if (this.unsub) this.unsub();
+    try {
+      const snap = await this.ref().get();
+      if (snap.exists) this.aplicarRemoto(snap.data(), true);
+      await this.ref().set(this.payload());   // sube lo que haya en este equipo
+
+      this.unsub = this.ref().onSnapshot(s => {
+        if (!s.exists || this.aplicando) return;
+        this.aplicarRemoto(s.data(), false);
+      }, err => { console.warn('onSnapshot', err); this.badge('err', 'Sin conexión'); });
+
+      this.badge('on', 'En la nube');
+      if (!silencioso) toast('Sincronizado con el código «' + code + '»');
+      updateSyncUI();
+    } catch (e) {
+      console.warn('conectar', e);
+      this.active = false;
+      this.badge('err', 'Error');
+      alert('No se pudo conectar. Revisa que haya internet.');
+    }
+  },
+
+  desconectar() {
+    this.active = false; this.code = null;
+    if (this.unsub) { this.unsub(); this.unsub = null; }
+    localStorage.removeItem(CODE_KEY);
+    this.badge('', 'Local');
+    $('btnSyncConnect').classList.remove('hide');
+    $('btnSyncDisconnect').classList.add('hide');
+    updateSyncUI();
+  },
+
+  payload() {
+    return { vehicles, meta: flotaMeta, updatedAt: Date.now() };
+  },
+
+  push() {
+    if (!this.active || !this.code) return;
+    clearTimeout(this.pushT);
+    this.pushT = setTimeout(() => {
+      this.ref().set(this.payload()).catch(e => console.warn('push', e));
+    }, 700);
+  },
+
+  // Une por id quedándose con la versión más nueva (updatedAt mayor). El
+  // borrado es una versión más como otra cualquiera: gana si es posterior.
+  uneLista(local, remoto) {
+    const m = new Map();
+    (local || []).forEach(x => m.set(x.id, x));
+    (remoto || []).forEach(x => {
+      const e = m.get(x.id);
+      if (!e || (x.updatedAt || 0) >= (e.updatedAt || 0)) m.set(x.id, x);
+    });
+    return [...m.values()];
+  },
+
+  uneVehiculos(local, remoto) {
+    const ids = new Set([...(local || []).map(v => v.id), ...(remoto || []).map(v => v.id)]);
+    const out = [];
+    ids.forEach(id => {
+      const lv = (local || []).find(v => v.id === id);
+      const rv = (remoto || []).find(v => v.id === id);
+      if (lv && rv) {
+        const base = (rv.updatedAt || 0) > (lv.updatedAt || 0) ? rv : lv;
+        out.push({
+          ...base,
+          records: this.uneLista(lv.records, rv.records),
+          fuel: this.uneLista(lv.fuel, rv.fuel)
+        });
+      } else out.push(lv || rv);
+    });
+    return out;
+  },
+
+  uneMeta(local, remoto) {
+    const vistos = new Set();
+    const todo = [...(local.log || []), ...(remoto.log || [])].filter(e => {
+      const k = e.at + '|' + e.deviceId;
+      if (vistos.has(k)) return false; vistos.add(k); return true;
+    }).sort((a, b) => b.at - a.at).slice(0, 60);
+    const lc = [local.lastChange, remoto.lastChange]
+      .filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || null;
+    return { log: todo, lastChange: lc };
+  },
+
+  aplicarRemoto(data, inicial) {
+    if (!data) return;
+    this.aplicando = true;
+    const antesLC = flotaMeta.lastChange ? flotaMeta.lastChange.at : 0;
+
+    vehicles = this.uneVehiculos(vehicles, data.vehicles || []);
+    if (data.meta) flotaMeta = this.uneMeta(flotaMeta, data.meta);
+    if (!vehicles.find(v => v.id === selectedId)) selectedId = vehicles[0] ? vehicles[0].id : null;
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles));
+    localStorage.setItem(META_KEY, JSON.stringify(flotaMeta));
+    render();
+
+    // Aviso: si el último cambio es nuevo y de otro dispositivo.
+    const lc = flotaMeta.lastChange;
+    if (!inicial && lc && lc.at > antesLC && lc.deviceId !== deviceId) {
+      const verbo = {
+        'revision': 'añadió una revisión', 'repostaje': 'añadió un repostaje',
+        'vehiculo': 'añadió un vehículo',
+        'borrar-revision': 'borró una revisión', 'borrar-repostaje': 'borró un repostaje',
+        'restaurar': 'restauró algo'
+      }[lc.action] || 'hizo un cambio';
+      toast((lc.by || 'Alguien') + ' ' + verbo + (lc.label ? ': ' + lc.label : ''));
+    }
+
+    // Si al fusionar este equipo aporta algo que el remoto no tenía, súbelo.
+    this.aplicando = false;
+    if (!inicial && JSON.stringify(this.limpio(data)) !== JSON.stringify(this.limpio(this.payload())))
+      this.push();
+  },
+
+  limpio(d) { return { vehicles: d.vehicles || [], meta: d.meta || null }; },
+
+  // --- fotos: en una subcolección, para no inflar el documento principal ---
+  subirFoto(id, dataUrl) {
+    if (!this.active || !this.code) return;
+    this.ref().collection('fotos').doc(id).set({ data: dataUrl, at: Date.now() })
+      .catch(e => console.warn('subirFoto', e));
+  },
+  async bajarFoto(id) {
+    if (!this.active || !this.code) return null;
+    try {
+      const s = await this.ref().collection('fotos').doc(id).get();
+      if (s.exists && s.data().data) {
+        const d = s.data().data;
+        Fotos.put(id, d).catch(() => {});   // se guarda en local para la próxima
+        return d;
+      }
+    } catch (e) { console.warn('bajarFoto', e); }
+    return null;
+  }
+};
+
+/* ==========================================================
+   PAPELERA + REGISTRO DE CAMBIOS
+========================================================== */
+function borrados() {
+  const out = [];
+  vehicles.forEach(v => {
+    (v.records || []).filter(r => r.deleted).forEach(r =>
+      out.push({ tipo: 'revision', v, item: r,
+        titulo: fmtDate(r.date), sub: r.taller + (r.reparacion ? ' · ' + r.reparacion : '') }));
+    (v.fuel || []).filter(f => f.deleted).forEach(f =>
+      out.push({ tipo: 'repostaje', v, item: f,
+        titulo: fmtDate(f.date),
+        sub: [f.estacion, num(f.litros) ? fmtDec(num(f.litros), 2) + ' l' : '', num(f.importe) ? fmtDec(num(f.importe), 2) + ' €' : '']
+          .filter(Boolean).join(' · ') }));
+  });
+  return out.sort((a, b) => (b.item.updatedAt || 0) - (a.item.updatedAt || 0));
+}
+
+function renderTrash() {
+  const list = borrados();
+  $('trashList').innerHTML = list.length
+    ? list.map((x, i) => `
+      <div class="trash-row">
+        <div class="trash-main">
+          <div class="trash-t"><span class="trash-tag">${x.tipo === 'revision' ? 'REVISIÓN' : 'REPOSTAJE'}</span>${esc(x.titulo)} · ${esc(x.v.plate)}</div>
+          <div class="trash-s">${esc(x.sub)}</div>
+        </div>
+        <button class="sync-btn" data-restore="${i}">Restaurar</button>
+      </div>`).join('')
+    : '<div class="empty">La papelera está vacía.</div>';
+
+  $('trashList').querySelectorAll('[data-restore]').forEach(b => {
+    b.onclick = () => {
+      const x = list[+b.dataset.restore];
+      delete x.item.deleted; stamp(x.item);
+      logChange('restaurar', x.titulo + ' · ' + x.v.plate);
+      persist(); Sync.push(); render(); renderTrash();
+      toast('Restaurado');
+    };
+  });
+}
+
+function renderLog() {
+  const log = flotaMeta.log || [];
+  $('logList').innerHTML = log.length
+    ? log.map(e => {
+        const verbo = {
+          'revision': 'añadió una revisión', 'repostaje': 'añadió un repostaje',
+          'vehiculo': 'añadió un vehículo', 'borrar-revision': 'borró una revisión',
+          'borrar-repostaje': 'borró un repostaje', 'restaurar': 'restauró'
+        }[e.action] || 'cambió algo';
+        return `<div class="log-row"><b>${esc(e.by || 'Alguien')}</b> ${verbo}${e.label ? ': ' + esc(e.label) : ''}
+                <span class="when">— ${fmtCuando(e.at)}</span></div>`;
+      }).join('')
+    : '<div class="empty">Todavía no hay cambios registrados.</div>';
+}
+
+function fmtCuando(at) {
+  const d = new Date(at), h = String(d.getHours()).padStart(2, '0'), m = String(d.getMinutes()).padStart(2, '0');
+  return fmtDate(d.toISOString().slice(0, 10)) + ' ' + h + ':' + m;
+}
+
+function updateSyncUI() {
+  const nB = borrados().length;
+  $('btnTrash').textContent = nB ? 'Papelera (' + nB + ')' : 'Papelera';
+  const info = $('syncInfo');
+  if (Sync.active && Sync.code) {
+    info.classList.remove('hide');
+    info.innerHTML = 'Código: <b>' + esc(Sync.code) + '</b>' + (userName() ? ' · ' + esc(userName()) : '');
+  } else info.classList.add('hide');
+}
+
+/* wiring de la barra y los diálogos */
+$('btnSyncConnect').onclick = () => Sync.conectar($('syncCode').value);
+$('btnSyncDisconnect').onclick = () => { if (confirm('¿Dejar de sincronizar en este dispositivo?')) Sync.desconectar(); };
+$('syncCode').onkeydown = e => { if (e.key === 'Enter') Sync.conectar($('syncCode').value); };
+$('btnTrash').onclick = () => { renderTrash(); $('trashModal').classList.remove('hide'); };
+$('btnLog').onclick = () => { renderLog(); $('logModal').classList.remove('hide'); };
+$('trashX').onclick = () => $('trashModal').classList.add('hide');
+$('logX').onclick = () => $('logModal').classList.add('hide');
+$('trashModal').onclick = e => { if (e.target === $('trashModal')) $('trashModal').classList.add('hide'); };
+$('logModal').onclick = e => { if (e.target === $('logModal')) $('logModal').classList.add('hide'); };
+
 /* ---------- arranque ---------- */
 $('ver').textContent = APP_VERSION;
 setView(localStorage.getItem('flota_view') === 'fuel' ? 'fuel' : 'rev');
 render();
+Sync.init();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
