@@ -33,6 +33,10 @@
   .tab.on { border-color:oklch(0.5 0.14 230); background:oklch(0.5 0.14 230); color:white; font-weight:600; }
   .tab-add { padding:9px 14px; border-radius:8px; border:1px dashed oklch(0.75 0.01 80);
              background:transparent; color:oklch(0.45 0.01 80); font-size:14px; cursor:pointer; }
+  .tabs .grow { flex:1; }
+  .veh-edit { padding:7px 11px; border-radius:8px; border:1px solid oklch(0.9 0.01 80);
+              background:white; color:oklch(0.5 0.01 80); font-size:12px; cursor:pointer; }
+  .veh-edit:hover { border-color:oklch(0.8 0.01 80); }
 
   /* selector de sección */
   .views { display:inline-flex; background:oklch(0.94 0.006 80); border-radius:10px; padding:3px; margin-bottom:24px; }
@@ -271,6 +275,9 @@
            style="padding:8px 12px; border-radius:8px; border:1px solid oklch(0.8 0.01 80); font-size:14px; width:140px;">
     <button class="primary hide" id="btnConfirmVehicle" style="padding:9px 14px;">Añadir</button>
     <button class="ghost hide" id="btnCancelVehicle">Cancelar</button>
+    <span class="grow"></span>
+    <button class="veh-edit" id="btnRenameVehicle" title="Cambiar la matrícula del vehículo seleccionado">✏️ Renombrar</button>
+    <button class="veh-edit" id="btnDeleteVehicle" title="Enviar el vehículo seleccionado a la papelera">🗑️ Eliminar</button>
   </div>
 
   <div class="views">
@@ -537,7 +544,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.6.0';
+const APP_VERSION = 'v1.7.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -984,8 +991,12 @@ function logChange(action, label) {
   flotaMeta.lastChange = entry;
 }
 
+// Vehículos que se ven: los no borrados. Los borrados se guardan en el
+// array (para poder restaurarlos y sincronizar el borrado) pero no salen.
+function activeVehicles() { return vehicles.filter(v => !v.deleted); }
 function currentVehicle() {
-  return vehicles.find(v => v.id === selectedId) || vehicles[0] || { id: null, plate: '', records: [], fuel: [] };
+  const act = activeVehicles();
+  return act.find(v => v.id === selectedId) || act[0] || { id: null, plate: '', records: [], fuel: [] };
 }
 // Los borrados no se quitan del array: se marcan deleted y se filtran aquí.
 // Así se pueden restaurar y el borrado se propaga bien al resto (si se
@@ -1002,9 +1013,14 @@ function sortedFuel() {
 /* ---------- pestañas de vehículo ---------- */
 function renderTabs() {
   const cur = currentVehicle();
-  $('tabs').innerHTML = vehicles.map(v =>
+  const act = activeVehicles();
+  $('tabs').innerHTML = act.map(v =>
     `<button class="tab${v.id === cur.id ? ' on' : ''}" data-id="${esc(v.id)}">${esc(v.plate)}</button>`
   ).join('');
+  // Renombrar/eliminar solo tienen sentido con un vehículo seleccionado.
+  const hay = !!cur.id;
+  $('btnRenameVehicle').classList.toggle('hide', !hay);
+  $('btnDeleteVehicle').classList.toggle('hide', !hay);
   $('tabs').querySelectorAll('.tab').forEach(b => {
     b.onclick = () => { selectedId = b.dataset.id; setAddingVehicle(false); render(); };
   });
@@ -1654,6 +1670,36 @@ $('newPlate').onkeydown = e => {
   if (e.key === 'Escape') setAddingVehicle(false);
 };
 
+$('btnRenameVehicle').onclick = () => {
+  const cur = currentVehicle();
+  if (!cur.id) return;
+  const nueva = (prompt('Nueva matrícula:', cur.plate) || '').trim().toUpperCase();
+  if (!nueva || nueva === cur.plate) return;
+  const antes = cur.plate;
+  cur.plate = nueva; stamp(cur);
+  logChange('vehiculo-renombrar', antes + ' → ' + nueva);
+  persist(); Sync.push();
+  render();
+};
+
+$('btnDeleteVehicle').onclick = () => {
+  const cur = currentVehicle();
+  if (!cur.id) return;
+  const nRev = (cur.records || []).filter(r => !r.deleted).length;
+  const nRep = (cur.fuel || []).filter(f => !f.deleted).length;
+  const detalle = (nRev || nRep)
+    ? '\n\nSe llevará a la papelera con sus ' + nRev + ' revisiones y ' + nRep + ' repostajes. Podrás restaurarlo.'
+    : '\n\nPodrás restaurarlo desde la papelera.';
+  if (!confirm('¿Eliminar el vehículo ' + cur.plate + '?' + detalle)) return;
+  cur.deleted = true; stamp(cur);
+  logChange('vehiculo-borrar', cur.plate);
+  // pasar a otro vehículo activo, si queda alguno
+  const otro = activeVehicles()[0];
+  selectedId = otro ? otro.id : null;
+  persist(); Sync.push();
+  render();
+};
+
 /* ---------- km actuales (aceite) ---------- */
 $('oilCur').oninput = () => {
   currentKmInputs[currentVehicle().id] = $('oilCur').value;
@@ -1833,6 +1879,7 @@ const Sync = {
       const verbo = {
         'revision': 'añadió una revisión', 'repostaje': 'añadió un repostaje',
         'vehiculo': 'añadió un vehículo',
+        'vehiculo-renombrar': 'renombró un vehículo', 'vehiculo-borrar': 'borró un vehículo',
         'borrar-revision': 'borró una revisión', 'borrar-repostaje': 'borró un repostaje',
         'restaurar': 'restauró algo'
       }[lc.action] || 'hizo un cambio';
@@ -1873,6 +1920,12 @@ const Sync = {
 function borrados() {
   const out = [];
   vehicles.forEach(v => {
+    if (v.deleted) {
+      const nRev = (v.records || []).filter(r => !r.deleted).length;
+      const nRep = (v.fuel || []).filter(f => !f.deleted).length;
+      out.push({ tipo: 'vehiculo', v, item: v, titulo: v.plate,
+        sub: 'Vehículo completo · ' + nRev + ' revisiones, ' + nRep + ' repostajes' });
+    }
     (v.records || []).filter(r => r.deleted).forEach(r =>
       out.push({ tipo: 'revision', v, item: r,
         titulo: fmtDate(r.date), sub: r.taller + (r.reparacion ? ' · ' + r.reparacion : '') }));
@@ -1891,7 +1944,7 @@ function renderTrash() {
     ? list.map((x, i) => `
       <div class="trash-row">
         <div class="trash-main">
-          <div class="trash-t"><span class="trash-tag">${x.tipo === 'revision' ? 'REVISIÓN' : 'REPOSTAJE'}</span>${esc(x.titulo)} · ${esc(x.v.plate)}</div>
+          <div class="trash-t"><span class="trash-tag">${x.tipo === 'revision' ? 'REVISIÓN' : x.tipo === 'repostaje' ? 'REPOSTAJE' : 'VEHÍCULO'}</span>${esc(x.titulo)}${x.tipo === 'vehiculo' ? '' : ' · ' + esc(x.v.plate)}</div>
           <div class="trash-s">${esc(x.sub)}</div>
         </div>
         <button class="sync-btn" data-restore="${i}">Restaurar</button>
@@ -1902,7 +1955,8 @@ function renderTrash() {
     b.onclick = () => {
       const x = list[+b.dataset.restore];
       delete x.item.deleted; stamp(x.item);
-      logChange('restaurar', x.titulo + ' · ' + x.v.plate);
+      logChange('restaurar', x.titulo + (x.tipo === 'vehiculo' ? '' : ' · ' + x.v.plate));
+      if (x.tipo === 'vehiculo') selectedId = x.item.id;   // volver a mostrarlo
       persist(); Sync.push(); render(); renderTrash();
       toast('Restaurado');
     };
@@ -1915,7 +1969,8 @@ function renderLog() {
     ? log.map(e => {
         const verbo = {
           'revision': 'añadió una revisión', 'repostaje': 'añadió un repostaje',
-          'vehiculo': 'añadió un vehículo', 'borrar-revision': 'borró una revisión',
+          'vehiculo': 'añadió un vehículo', 'vehiculo-renombrar': 'renombró',
+          'vehiculo-borrar': 'borró un vehículo', 'borrar-revision': 'borró una revisión',
           'borrar-repostaje': 'borró un repostaje', 'restaurar': 'restauró'
         }[e.action] || 'cambió algo';
         return `<div class="log-row"><b>${esc(e.by || 'Alguien')}</b> ${verbo}${e.label ? ': ' + esc(e.label) : ''}
