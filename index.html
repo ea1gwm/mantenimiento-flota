@@ -153,6 +153,7 @@
   .tag.part { background:oklch(0.94 0.02 80); color:oklch(0.5 0.02 80); }
   .tag.aparte { background:oklch(0.93 0.05 60); color:oklch(0.45 0.13 55); }
   .fuel-nota { font-size:12px; color:oklch(0.45 0.06 60); font-style:italic; margin-top:2px; }
+  .fuel-extra { font-size:12px; color:oklch(0.45 0.09 260); font-weight:600; margin-top:2px; }
 
   /* ---- lectura del recibo (OCR) ---- */
   .ocr-box { margin-top:8px; padding:10px 12px; border-radius:9px; font-size:12px; line-height:1.5;
@@ -445,6 +446,18 @@
               <input type="number" id="gImporte" placeholder="0,00" step="0.01" min="0">
             </label>
           </div>
+          <div class="form2">
+            <label class="field">EXTRAS € <span class="hint">— AdBlue, lavado…</span>
+              <input type="number" id="gExtra" placeholder="0,00" step="0.01" min="0">
+            </label>
+            <label class="field">CONCEPTO
+              <input id="gExtraNota" placeholder="AdBlue / Lavado">
+            </label>
+          </div>
+          <div class="hint" style="font-size:11px; margin-top:-6px;">
+            Lo que compraste además del gasoil (AdBlue, lavado, aditivo). Cuenta para el
+            gasto de la tarjeta, pero no para el consumo ni el precio del litro.
+          </div>
           <label class="field">GASOLINERA
             <input id="gEstacion" placeholder="Nombre o localidad">
           </label>
@@ -577,7 +590,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.9.1';
+const APP_VERSION = 'v1.10.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -888,7 +901,6 @@ function parseRecibo(texto) {
   const cerca = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= tol;
 
   r.cuadraProducto = cerca(r.precio && r.litros ? r.precio * r.litros : null, r.importe, 0.02);
-  r.cuadraTotales  = cerca(r.importe, r.totalVenta, 0.005) || cerca(r.importe, r.totalTarjeta, 0.005);
 
   // Si el producto no cuadra pero los totales sí, el importe es bueno y
   // lo que falla son los litros o el precio: se recalcula el sospechoso.
@@ -903,7 +915,25 @@ function parseRecibo(texto) {
   if (!r.importe && r.totalVenta) r.importe = r.totalVenta;
   if (!r.litros && r.importe && r.precio) r.litros = Math.round(r.importe / r.precio * 100) / 100;
 
-  r.fiable = !!(r.date && r.km && r.litros && r.importe && r.cuadraProducto && r.cuadraTotales);
+  // El total del ticket (más repetido, más fiable) debe casar con el
+  // diésel MÁS lo que se haya comprado además (AdBlue, lavado, aditivo).
+  const total = r.totalTarjeta != null ? r.totalTarjeta : r.totalVenta;
+  r.extra = 0; r.extraNota = '';
+  if (total != null && r.importe != null) {
+    const dif = Math.round((total - r.importe) * 100) / 100;
+    if (dif >= 0.02) {
+      // Total > diésel: la diferencia es una compra extra en el mismo recibo.
+      r.extra = dif;
+      r.extraNota = /adblue|ad\s*blue/i.test(t) ? 'AdBlue'
+        : /lavado|lavaject|t[uú]nel|wash/i.test(t) ? 'Lavado'
+        : /aditiv/i.test(t) ? 'Aditivo' : 'Extra';
+    }
+  }
+  // Total MENOR que el diésel = el importe del diésel se leyó mal (no es
+  // un extra negativo). Eso sí es un error que hay que revisar.
+  r.totalMenor = (total != null && r.importe != null && total < r.importe - 0.02);
+
+  r.fiable = !!(r.date && r.km && r.litros && r.importe && r.cuadraProducto && !r.totalMenor);
   return r;
 }
 
@@ -1298,13 +1328,17 @@ function renderFuel() {
   const cons = calcConsumos();
   $('fuelPlate').textContent = cur.plate;
 
-  /* --- KPIs --- */
+  /* --- KPIs ---
+     El combustible (litros/importe) manda en consumo y €/l; los extras
+     (AdBlue, lavado) suman al gasto total pero no tocan el precio del litro. */
   const litrosTot = fuel.reduce((a, f) => a + (num(f.litros) || 0), 0);
-  const gastoTot = fuel.reduce((a, f) => a + (num(f.importe) || 0), 0);
+  const gastoFuel = fuel.reduce((a, f) => a + (num(f.importe) || 0), 0);
+  const gastoExtras = fuel.reduce((a, f) => a + (num(f.extra) || 0), 0);
+  const gastoTot = gastoFuel + gastoExtras;
   $('gCount').textContent = fuel.length;
   $('gTotal').textContent = gastoTot ? fmtDec(gastoTot, 2) + ' €' : '—';
   $('gLitrosTot').textContent = litrosTot ? fmtDec(litrosTot, 2) + ' l' : '—';
-  $('gPrice').textContent = (litrosTot && gastoTot) ? fmtDec(gastoTot / litrosTot, 3) + ' €/l' : '—';
+  $('gPrice').textContent = (litrosTot && gastoFuel) ? fmtDec(gastoFuel / litrosTot, 3) + ' €/l' : '—';
 
   // Consumo medio: litros y km de los tramos válidos, sumados. Así un hueco
   // (repostajes sin registrar) no arrastra la media hacia abajo.
@@ -1320,8 +1354,8 @@ function renderFuel() {
   $('consNote').textContent = tramosMalos
     ? ' · ' + tramosMalos + (tramosMalos === 1 ? ' tramo excluido' : ' tramos excluidos') + ' por datos incompletos'
     : '';
-  $('gCost100').textContent = (medio && litrosTot && gastoTot)
-    ? fmtDec(medio * (gastoTot / litrosTot), 2) + ' €' : '—';
+  $('gCost100').textContent = (medio && litrosTot && gastoFuel)
+    ? fmtDec(medio * (gastoFuel / litrosTot), 2) + ' €' : '—';
 
   /* --- listado --- */
   const rows = [...fuel].reverse();
@@ -1350,6 +1384,7 @@ function renderFuel() {
             <span class="fuel-imp">${imp ? fmtDec(imp, 2) + ' €' : ''}</span>
           </div>
           <div class="fuel-sub">${partes.join(' · ')}</div>
+          ${num(f.extra) ? '<div class="fuel-extra">+ ' + esc(f.extraNota || 'Extra') + ' ' + fmtDec(num(f.extra), 2) + ' € <span style="opacity:.7">(total tarjeta ' + fmtDec((imp || 0) + num(f.extra), 2) + ' €)</span></div>' : ''}
           ${f.nota ? '<div class="fuel-nota">' + esc(f.nota) + '</div>' : ''}
           <div class="fuel-cons${c ? (c.ok ? '' : ' warn') : ' na'}">${c
             ? (c.ok
@@ -1452,8 +1487,11 @@ function renderMes() {
   // (cuando la tarjeta llegó al tope) se registra pero no descuenta.
   const conTarjeta = delMes.filter(f => f.pago !== 'otro');
   const aparte = delMes.filter(f => f.pago === 'otro');
-  const gasto = conTarjeta.reduce((a, f) => a + (num(f.importe) || 0), 0);
-  const gastoAparte = aparte.reduce((a, f) => a + (num(f.importe) || 0), 0);
+  // Al límite de la tarjeta cuenta TODO lo cargado: gasoil + extras (AdBlue,
+  // lavado…), que también se pagaron con la tarjeta.
+  const cargado = f => (num(f.importe) || 0) + (num(f.extra) || 0);
+  const gasto = conTarjeta.reduce((a, f) => a + cargado(f), 0);
+  const gastoAparte = aparte.reduce((a, f) => a + cargado(f), 0);
   const litros = delMes.reduce((a, f) => a + (num(f.litros) || 0), 0);
 
   $('mesL').textContent = 'Gasto con tarjeta en ' + MESES_LARGO[ahora.getMonth()];
@@ -1566,7 +1604,7 @@ function marcarOcr(id, valor) {
   el.addEventListener('input', () => el.classList.remove('ocr-fill'), { once: true });
 }
 function limpiarMarcas() {
-  ['gDate', 'gKm', 'gLitros', 'gImporte', 'gEstacion']
+  ['gDate', 'gKm', 'gLitros', 'gImporte', 'gExtra', 'gExtraNota', 'gEstacion']
     .forEach(id => $(id).classList.remove('ocr-fill'));
 }
 
@@ -1614,6 +1652,8 @@ $('gFoto').onchange = async e => {
     if (r.km)       { marcarOcr('gKm', r.km);                        leidos.push(fmtNum(r.km) + ' km'); }
     if (r.litros)   { marcarOcr('gLitros', r.litros);                leidos.push(fmtDec(r.litros, 2) + ' l'); }
     if (r.importe)  { marcarOcr('gImporte', r.importe);              leidos.push(fmtDec(r.importe, 2) + ' €'); }
+    if (r.extra)    { marcarOcr('gExtra', r.extra); marcarOcr('gExtraNota', r.extraNota);
+                      leidos.push('+ ' + fmtDec(r.extra, 2) + ' € ' + r.extraNota); }
     if (r.estacion) { marcarOcr('gEstacion', r.estacion);            leidos.push(r.estacion); }
 
     if (!leidos.length) {
@@ -1623,7 +1663,7 @@ $('gFoto').onchange = async e => {
 
     const avisos = [...r.avisos];
     if (!r.cuadraProducto) avisos.push('<b>las cuentas no cuadran</b> (€/l × litros ≠ importe): revisa los números');
-    if (!r.cuadraTotales && r.importe) avisos.push('el importe no coincide con el total del ticket');
+    if (r.totalMenor) avisos.push('el total del ticket es menor que el importe del combustible: revisa el importe');
     // el km tiene que ir hacia adelante
     const ptsPrev = puntosKm();
     if (r.km && ptsPrev.length && r.km < ptsPrev[ptsPrev.length - 1].km) {
@@ -1665,10 +1705,13 @@ $('btnAddFuel').onclick = async () => {
   cur.fuel = cur.fuel || [];
   const estacion = $('gEstacion').value.trim();
   const otroPago = $('gOtroPago').checked;
+  const extra = num($('gExtra').value);
   cur.fuel.push(stamp({
     id, date,
     km: normKm($('gKm').value),
     litros, importe,
+    extra: extra || null,
+    extraNota: extra ? ($('gExtraNota').value.trim() || 'Extra') : '',
     estacion,
     lleno: $('gLleno').checked,
     pago: otroPago ? 'otro' : 'tarjeta',
@@ -1681,6 +1724,7 @@ $('btnAddFuel').onclick = async () => {
 
   $('gDate').value = ''; $('gKm').value = ''; $('gLitros').value = '';
   $('gImporte').value = ''; $('gFoto').value = ''; $('gLleno').checked = true;
+  $('gExtra').value = ''; $('gExtraNota').value = '';
   $('gOtroPago').checked = false; $('gNota').value = '';
   fotoPendiente = null; $('gFotoPrev').innerHTML = '';
   $('gEstacion').value = '';
@@ -2049,9 +2093,12 @@ function resumenInforme(modo) {
   const reps = sortedFuel().filter(f => enPeriodo(f.date, modo));
   const cons = calcConsumos();   // sobre todo el histórico, para no cortar tramos
 
+  const cargado = f => (num(f.importe) || 0) + (num(f.extra) || 0);
   const litros = reps.reduce((a, f) => a + (num(f.litros) || 0), 0);
-  const gastoTarjeta = reps.filter(f => f.pago !== 'otro').reduce((a, f) => a + (num(f.importe) || 0), 0);
-  const gastoAparte = reps.filter(f => f.pago === 'otro').reduce((a, f) => a + (num(f.importe) || 0), 0);
+  const gastoFuel = reps.reduce((a, f) => a + (num(f.importe) || 0), 0);
+  const gastoExtras = reps.reduce((a, f) => a + (num(f.extra) || 0), 0);
+  const gastoTarjeta = reps.filter(f => f.pago !== 'otro').reduce((a, f) => a + cargado(f), 0);
+  const gastoAparte = reps.filter(f => f.pago === 'otro').reduce((a, f) => a + cargado(f), 0);
   const gastoTotal = gastoTarjeta + gastoAparte;
 
   // km recorridos en el periodo: de todos los puntos con km en el periodo
@@ -2067,8 +2114,8 @@ function resumenInforme(modo) {
     if (km > 0) consumo = l / km * 100;
   }
   return {
-    recs, reps, litros, gastoTarjeta, gastoAparte, gastoTotal, kmRec, consumo, cons,
-    precio: (litros && gastoTotal) ? gastoTotal / litros : null
+    recs, reps, litros, gastoFuel, gastoExtras, gastoTarjeta, gastoAparte, gastoTotal, kmRec, consumo, cons,
+    precio: (litros && gastoFuel) ? gastoFuel / litros : null   // €/l solo del gasoil
   };
 }
 
@@ -2083,6 +2130,8 @@ function renderReportResumen(modo) {
     r.kmRec != null ? ['Km recorridos', fmtNum(r.kmRec) + ' km'] : null,
     r.consumo ? ['Consumo medio', fmtDec(r.consumo, 2) + ' l/100 km'] : null,
     r.litros ? ['Litros', fmtDec(r.litros, 2) + ' l'] : null,
+    ['Gasoil', fmtDec(r.gastoFuel, 2) + ' €'],
+    r.gastoExtras ? ['Extras (AdBlue, lavado…)', fmtDec(r.gastoExtras, 2) + ' €'] : null,
     ['Gasto con tarjeta', fmtDec(r.gastoTarjeta, 2) + ' €'],
     r.gastoAparte ? ['Pagado aparte', fmtDec(r.gastoAparte, 2) + ' €'] : null,
     ['Gasto total', fmtDec(r.gastoTotal, 2) + ' €']
@@ -2110,6 +2159,7 @@ function generarInformeHTML(modo) {
   const kpis = [
     r.kmRec != null ? tarjeta('Km recorridos', fmtNum(r.kmRec) + ' km') : '',
     r.consumo ? tarjeta('Consumo medio', fmtDec(r.consumo, 2) + ' l/100km') : '',
+    r.gastoExtras ? tarjeta('Extras (AdBlue…)', fmtDec(r.gastoExtras, 2) + ' €') : '',
     tarjeta('Gasto con tarjeta', fmtDec(r.gastoTarjeta, 2) + ' €'),
     r.gastoAparte ? tarjeta('Pagado aparte', fmtDec(r.gastoAparte, 2) + ' €') : '',
     tarjeta('Gasto total', fmtDec(r.gastoTotal, 2) + ' €'),
@@ -2128,7 +2178,7 @@ function generarInformeHTML(modo) {
       <td class="n">${(l && imp) ? fmtDec(imp / l, 3) : '—'}</td>
       <td class="n">${imp ? fmtDec(imp, 2) + ' €' : '—'}</td>
       <td class="n">${c && c.ok ? fmtDec(c.l100, 2) : '—'}</td>
-      <td>${esc(f.estacion || '')}${f.pago === 'otro' ? ' <span class="ap">(pagado aparte)</span>' : ''}${f.nota ? '<br><span class="nt">' + esc(f.nota) + '</span>' : ''}</td>
+      <td>${esc(f.estacion || '')}${num(f.extra) ? ' <span class="ap">+ ' + esc(f.extraNota || 'extra') + ' ' + fmtDec(num(f.extra), 2) + ' €</span>' : ''}${f.pago === 'otro' ? ' <span class="ap">(pagado aparte)</span>' : ''}${f.nota ? '<br><span class="nt">' + esc(f.nota) + '</span>' : ''}</td>
     </tr>`;
   }).join('');
 
