@@ -118,6 +118,9 @@
                     color:white; font-size:12px; font-weight:600; cursor:pointer; }
   .mes-lim a { color:oklch(0.45 0.09 150); cursor:pointer; text-decoration:underline; }
 
+  .list-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+  .list-filter { padding:6px 10px; border-radius:8px; border:1px solid oklch(0.85 0.01 80);
+                 background:white; color:oklch(0.35 0.01 80); font-size:13px; max-width:55%; }
   .hist { max-height:420px; overflow-y:auto; display:flex; flex-direction:column; }
   .row { display:flex; flex-direction:column; gap:4px; padding:12px 0;
          border-bottom:1px solid oklch(0.93 0.008 80); }
@@ -365,7 +368,10 @@
       </div>
 
       <div class="card" style="padding-bottom:8px;">
-        <div class="card-t" style="margin-bottom:12px;">Historial (<span id="histPlate"></span>)</div>
+        <div class="list-head">
+          <div class="card-t">Historial (<span id="histPlate"></span>)</div>
+          <select class="list-filter" id="revFilter"></select>
+        </div>
         <div class="hist" id="hist"></div>
       </div>
 
@@ -519,7 +525,10 @@
       </div>
 
       <div class="card" style="padding-bottom:8px;">
-        <div class="card-t" style="margin-bottom:12px;">Repostajes (<span id="fuelPlate"></span>)</div>
+        <div class="list-head">
+          <div class="card-t">Repostajes (<span id="fuelPlate"></span>)</div>
+          <select class="list-filter" id="fuelFilter"></select>
+        </div>
         <div class="hist" id="fuelList"></div>
       </div>
 
@@ -590,7 +599,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.10.0';
+const APP_VERSION = 'v1.11.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -1173,12 +1182,36 @@ function renderOil() {
 }
 
 /* ---------- historial de revisiones ---------- */
+// Filtro por mes de las listas, para no verlas todas seguidas. El selector
+// se rellena con los meses que tienen datos; la selección se conserva entre
+// renders (y vuelve a "Todos" si el mes elegido se queda sin registros).
+let fuelFilterVal = 'todos';
+let revFilterVal = 'todos';
+function llenarFiltro(selId, items, actual) {
+  const meses = [...new Set(items.map(i => (i.date || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+  if (actual !== 'todos' && !meses.includes(actual)) actual = 'todos';
+  const sel = $(selId);
+  sel.innerHTML = ['<option value="todos">Todos (' + items.length + ')</option>']
+    .concat(meses.map(ym => {
+      const n = items.filter(i => (i.date || '').slice(0, 7) === ym).length;
+      const [y, m] = ym.split('-');
+      return '<option value="' + ym + '">' + MESES_LARGO[+m - 1] + ' ' + y + ' (' + n + ')</option>';
+    })).join('');
+  sel.value = actual;
+  return actual;
+}
+function aplicaFiltro(items, val) {
+  return val === 'todos' ? items : items.filter(i => (i.date || '').slice(0, 7) === val);
+}
+
 function renderHist() {
   const cur = currentVehicle();
   $('histPlate').textContent = cur.plate;
-  const rows = sortedRecords().reverse();
+  const all = sortedRecords();
+  revFilterVal = llenarFiltro('revFilter', all, revFilterVal);
+  const rows = aplicaFiltro(all, revFilterVal).reverse();
   if (!rows.length) {
-    $('hist').innerHTML = '<div class="empty">Sin registros todavía.</div>';
+    $('hist').innerHTML = '<div class="empty">Sin registros' + (revFilterVal === 'todos' ? ' todavía' : ' en ese mes') + '.</div>';
     return;
   }
   $('hist').innerHTML = rows.map(r => `
@@ -1357,10 +1390,11 @@ function renderFuel() {
   $('gCost100').textContent = (medio && litrosTot && gastoFuel)
     ? fmtDec(medio * (gastoFuel / litrosTot), 2) + ' €' : '—';
 
-  /* --- listado --- */
-  const rows = [...fuel].reverse();
+  /* --- listado (filtrable por mes; los KPIs de arriba son de todo) --- */
+  fuelFilterVal = llenarFiltro('fuelFilter', fuel, fuelFilterVal);
+  const rows = aplicaFiltro(fuel, fuelFilterVal).reverse();
   if (!rows.length) {
-    $('fuelList').innerHTML = '<div class="empty">Sin repostajes todavía.</div>';
+    $('fuelList').innerHTML = '<div class="empty">Sin repostajes' + (fuelFilterVal === 'todos' ? ' todavía' : ' en ese mes') + '.</div>';
   } else {
     $('fuelList').innerHTML = rows.map(f => {
       const l = num(f.litros), imp = num(f.importe);
@@ -1564,6 +1598,10 @@ function setView(v) {
 $('vbRev').onclick = () => setView('rev');
 $('vbFuel').onclick = () => setView('fuel');
 
+/* filtro por mes de las listas (solo afecta a la lista, no a los totales) */
+$('fuelFilter').onchange = () => { fuelFilterVal = $('fuelFilter').value; renderFuel(); };
+$('revFilter').onchange = () => { revFilterVal = $('revFilter').value; renderHist(); };
+
 /* ---------- formulario de revisión ---------- */
 function showErr(id, msg) {
   $(id).textContent = msg || '';
@@ -1664,6 +1702,16 @@ $('gFoto').onchange = async e => {
     const avisos = [...r.avisos];
     if (!r.cuadraProducto) avisos.push('<b>las cuentas no cuadran</b> (€/l × litros ≠ importe): revisa los números');
     if (r.totalMenor) avisos.push('el total del ticket es menor que el importe del combustible: revisa el importe');
+    // Fecha fuera del mes en curso: casi siempre es un mes mal leído por el
+    // OCR (confunde 8/6/0). Puede ser un recibo antiguo a propósito, por eso
+    // es solo un aviso.
+    if (r.date) {
+      const hoy = new Date();
+      const ymHoy = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0');
+      if (r.date.slice(0, 7) !== ymHoy) {
+        avisos.push('la fecha leída (<b>' + fmtDate(r.date) + '</b>) no es de este mes: comprueba que el mes esté bien');
+      }
+    }
     // el km tiene que ir hacia adelante
     const ptsPrev = puntosKm();
     if (r.km && ptsPrev.length && r.km < ptsPrev[ptsPrev.length - 1].km) {
