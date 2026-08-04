@@ -312,8 +312,8 @@
 
     <div class="col">
 
-      <div class="card">
-        <div class="card-t" style="margin-bottom:14px;">Registrar revisión</div>
+      <div class="card" id="revFormCard">
+        <div class="card-t" style="margin-bottom:14px;" id="revFormTitle">Registrar revisión</div>
         <div class="form">
           <label class="field">FECHA
             <input type="date" id="fDate">
@@ -335,6 +335,7 @@
             <input type="number" id="fOilInterval" placeholder="20000" value="20000" min="0">
           </label>
           <button class="primary" id="btnAdd" style="margin-top:4px;">Añadir registro</button>
+          <button class="ghost hide" id="btnCancelRevEdit" style="margin-top:2px;">Cancelar edición</button>
           <div class="err hide" id="formErr"></div>
         </div>
       </div>
@@ -603,7 +604,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.12.0';
+const APP_VERSION = 'v1.13.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -1036,6 +1037,7 @@ let selectedId = vehicles.length ? vehicles[0].id : null;
 let currentKmInputs = {};
 let fotoPendiente = null;   // dataURL de la foto elegida, aún sin guardar
 let editingFuelId = null;   // id del repostaje que se está editando (o null)
+let editingRevId = null;    // id de la revisión que se está editando (o null)
 
 // Registro de cambios: se guarda quién borra/añade qué, para poder mirar
 // atrás y para avisar al resto. lastChange dispara el aviso en los demás.
@@ -1228,7 +1230,10 @@ function renderHist() {
       <div class="row-taller">${esc(r.taller)}</div>
       <div class="row-bot">
         <div class="row-rep">${esc(r.reparacion)}</div>
-        <button class="row-del" data-id="${esc(r.id)}">Eliminar</button>
+        <div class="row-actions">
+          <button class="row-edit" data-editrev="${esc(r.id)}">Editar</button>
+          <button class="row-del" data-id="${esc(r.id)}">Eliminar</button>
+        </div>
       </div>
     </div>`).join('');
   $('hist').querySelectorAll('.row-del').forEach(b => {
@@ -1240,6 +1245,9 @@ function renderHist() {
       logChange('borrar-revision', fmtDate(rec.date) + ' · ' + rec.taller);
       persist(); Sync.push(); render();
     };
+  });
+  $('hist').querySelectorAll('[data-editrev]').forEach(b => {
+    b.onclick = () => editarRevision(b.dataset.editrev);
   });
 }
 
@@ -1621,25 +1629,59 @@ function showErr(id, msg) {
 
 $('fOil').onchange = () => $('fOilIntervalWrap').classList.toggle('hide', !$('fOil').checked);
 
+function resetRevForm() {
+  $('fDate').value = ''; $('fTaller').value = ''; $('fKm').value = ''; $('fRep').value = '';
+  $('fOil').checked = false; $('fOilInterval').value = '20000';
+  $('fOilIntervalWrap').classList.add('hide');
+  showErr('formErr', '');
+  editingRevId = null;
+  $('revFormTitle').textContent = 'Registrar revisión';
+  $('btnAdd').textContent = 'Añadir registro';
+  $('btnCancelRevEdit').classList.add('hide');
+}
+
+function editarRevision(id) {
+  const rec = (currentVehicle().records || []).find(r => r.id === id);
+  if (!rec) return;
+  editingRevId = id;
+  $('fDate').value = rec.date || '';
+  $('fTaller').value = rec.taller || '';
+  $('fKm').value = hasKm(rec) ? rec.km : '';
+  $('fRep').value = rec.reparacion || '';
+  $('fOil').checked = !!rec.oilIntervalKm;
+  $('fOilInterval').value = rec.oilIntervalKm || 20000;
+  $('fOilIntervalWrap').classList.toggle('hide', !rec.oilIntervalKm);
+  $('revFormTitle').textContent = 'Editar revisión';
+  $('btnAdd').textContent = 'Guardar cambios';
+  $('btnCancelRevEdit').classList.remove('hide');
+  showErr('formErr', '');
+  $('revFormCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+$('btnCancelRevEdit').onclick = () => resetRevForm();
+
 $('btnAdd').onclick = () => {
   const date = $('fDate').value;
   const taller = $('fTaller').value.trim();
   if (!date || !taller) { showErr('formErr', 'Introduce al menos fecha y taller.'); return; }
   const cur = currentVehicle();
   if (!cur.id) { showErr('formErr', 'Añade primero un vehículo.'); return; }
-  cur.records.push(stamp({
-    id: 'r' + Date.now(),
+  const campos = {
     date, taller,
     km: normKm($('fKm').value),
     reparacion: $('fRep').value.trim(),
     oilIntervalKm: $('fOil').checked ? (parseInt($('fOilInterval').value, 10) || 20000) : null
-  }));
-  logChange('revision', fmtDate(date) + ' · ' + taller);
+  };
+  if (editingRevId) {
+    const rec = cur.records.find(r => r.id === editingRevId);
+    if (rec) { Object.assign(rec, campos); stamp(rec);
+      logChange('editar-revision', fmtDate(date) + ' · ' + taller); }
+  } else {
+    cur.records.push(stamp({ id: 'r' + Date.now(), ...campos }));
+    logChange('revision', fmtDate(date) + ' · ' + taller);
+  }
   persist(); Sync.push();
-  $('fDate').value = ''; $('fTaller').value = ''; $('fKm').value = ''; $('fRep').value = '';
-  $('fOil').checked = false; $('fOilInterval').value = '20000';
-  $('fOilIntervalWrap').classList.add('hide');
-  showErr('formErr', '');
+  resetRevForm();
   render();
 };
 
@@ -2071,7 +2113,8 @@ const Sync = {
     if (!inicial && lc && lc.at > antesLC && lc.deviceId !== deviceId) {
       const verbo = {
         'revision': 'añadió una revisión', 'repostaje': 'añadió un repostaje',
-        'editar-repostaje': 'editó un repostaje', 'vehiculo': 'añadió un vehículo',
+        'editar-repostaje': 'editó un repostaje', 'editar-revision': 'editó una revisión',
+        'vehiculo': 'añadió un vehículo',
         'vehiculo-renombrar': 'renombró un vehículo', 'vehiculo-borrar': 'borró un vehículo',
         'borrar-revision': 'borró una revisión', 'borrar-repostaje': 'borró un repostaje',
         'restaurar': 'restauró algo'
@@ -2162,7 +2205,8 @@ function renderLog() {
     ? log.map(e => {
         const verbo = {
           'revision': 'añadió una revisión', 'repostaje': 'añadió un repostaje',
-          'editar-repostaje': 'editó un repostaje', 'vehiculo': 'añadió un vehículo',
+          'editar-repostaje': 'editó un repostaje', 'editar-revision': 'editó una revisión',
+          'vehiculo': 'añadió un vehículo',
           'vehiculo-renombrar': 'renombró', 'vehiculo-borrar': 'borró un vehículo',
           'borrar-revision': 'borró una revisión', 'borrar-repostaje': 'borró un repostaje',
           'restaurar': 'restauró'
@@ -2259,10 +2303,77 @@ function nombreInforme(modo) {
   return 'Flota_' + (cur.plate || 'vehiculo').replace(/[^A-Z0-9]/gi, '') + '_' + suf + '.html';
 }
 
+/* ---------- gráficas del informe (SVG estático, sin JS) ---------- */
+function repSvgBarras(items, opts) {
+  opts = opts || {};
+  if (!items.length) return '<p class="muted">Sin datos suficientes.</p>';
+  const color = opts.color || '#3f7dc9';
+  const W = 700, H = 235, padT = 18, padB = 56, padX = 8;
+  const n = items.length;
+  const bw = (W - padX * 2) / n;
+  const barW = Math.min(34, bw * 0.62);
+  const maxV = Math.max(...items.map(i => i.v), 0) || 1;
+  const escalaH = H - padT - padB;
+  const y0 = padT + escalaH;
+  const verVals = n <= 16;
+  const cada = n > 30 ? 3 : (n > 18 ? 2 : 1);
+  const barras = items.map((it, i) => {
+    const x = padX + i * bw + (bw - barW) / 2;
+    const h = Math.max(2, it.v / maxV * escalaH);
+    const y = y0 - h;
+    const cx = x + barW / 2;
+    let s = `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${color}"/>`;
+    if (verVals) s += `<text x="${cx.toFixed(1)}" y="${(y - 3).toFixed(1)}" font-size="9" text-anchor="middle" fill="#555">${opts.fmt ? opts.fmt(it.v) : it.v}</text>`;
+    if (i % cada === 0) s += `<text x="${cx.toFixed(1)}" y="${(y0 + 12).toFixed(1)}" font-size="8" text-anchor="end" fill="#999" transform="rotate(-45 ${cx.toFixed(1)} ${(y0 + 12).toFixed(1)})">${esc(it.label)}</text>`;
+    return s;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="rchart" xmlns="http://www.w3.org/2000/svg"><line x1="${padX}" y1="${y0}" x2="${W - padX}" y2="${y0}" stroke="#eee"/>${barras}</svg>`;
+}
+
+function repSvgLinea(pts) {
+  if (pts.length < 2) return '<p class="muted">Sin datos suficientes.</p>';
+  const W = 700, H = 235, padT = 15, padB = 34, padL = 58, padR = 15;
+  const ts = pts.map(p => p.t), kms = pts.map(p => p.km);
+  const minT = Math.min(...ts), maxT = Math.max(...ts), spanT = (maxT - minT) || 1;
+  const minK = Math.min(...kms), maxK = Math.max(...kms), spanK = (maxK - minK) || 1;
+  const X = t => padL + (t - minT) / spanT * (W - padL - padR);
+  const Y = k => padT + (1 - (k - minK) / spanK) * (H - padT - padB);
+  const poly = pts.map(p => `${X(p.t).toFixed(1)},${Y(p.km).toFixed(1)}`).join(' ');
+  const dots = pts.map(p => `<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.km).toFixed(1)}" r="2.3" fill="#3f7dc9"/>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="rchart" xmlns="http://www.w3.org/2000/svg">
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}" stroke="#eee"/>
+    <line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="#eee"/>
+    <text x="${padL - 6}" y="${padT + 4}" font-size="9" text-anchor="end" fill="#999">${fmtNum(Math.round(maxK))} km</text>
+    <text x="${padL - 6}" y="${H - padB}" font-size="9" text-anchor="end" fill="#999">${fmtNum(Math.round(minK))}</text>
+    <text x="${padL}" y="${H - 12}" font-size="9" fill="#999">${fmtDateShort(pts[0].dateIso)}</text>
+    <text x="${W - padR}" y="${H - 12}" font-size="9" text-anchor="end" fill="#999">${fmtDateShort(pts[pts.length - 1].dateIso)}</text>
+    <polyline points="${poly}" fill="none" stroke="#3f7dc9" stroke-width="2"/>${dots}</svg>`;
+}
+
 function generarInformeHTML(modo) {
   const cur = currentVehicle();
   const r = resumenInforme(modo);
   const hoy = fmtDate(new Date().toISOString().slice(0, 10));
+
+  // datos de las gráficas
+  const precios = r.reps.filter(f => num(f.litros) && num(f.importe))
+    .map(f => ({ v: num(f.importe) / num(f.litros), label: fmtDateShort(f.date) }));
+  const consumos = r.reps.filter(f => r.cons.get(f.id) && r.cons.get(f.id).ok)
+    .map(f => ({ v: r.cons.get(f.id).l100, label: fmtDateShort(f.date) }));
+  const porMesMap = {};
+  r.reps.forEach(f => { const imp = num(f.importe); if (!imp) return; (porMesMap[f.date.slice(0, 7)] = (porMesMap[f.date.slice(0, 7)] || 0) + imp); });
+  const porMes = Object.keys(porMesMap).sort().map(ym => ({ v: porMesMap[ym], label: fmtMonth(ym) }));
+  const kmPts = [];
+  r.recs.filter(hasKm).forEach(x => kmPts.push({ t: new Date(x.date).getTime(), km: x.km, dateIso: x.date }));
+  r.reps.filter(hasKm).forEach(f => kmPts.push({ t: new Date(f.date).getTime(), km: f.km, dateIso: f.date }));
+  kmPts.sort((a, b) => a.t - b.t || a.km - b.km);
+
+  const graficas = (kmPts.length >= 2 || precios.length || porMes.length) ? `
+  <h2>Gráficas</h2>
+  ${kmPts.length >= 2 ? `<div class="chart"><h3>Evolución del kilometraje</h3>${repSvgLinea(kmPts)}</div>` : ''}
+  ${precios.length ? `<div class="chart"><h3>Precio del litro (€/l) — evolución</h3>${repSvgBarras(precios, { color: '#3f7dc9', fmt: v => fmtDec(v, 3) })}</div>` : ''}
+  ${consumos.length ? `<div class="chart"><h3>Consumo por repostaje (l/100 km)</h3>${repSvgBarras(consumos, { color: '#4e9a67', fmt: v => fmtDec(v, 1) })}</div>` : ''}
+  ${porMes.length ? `<div class="chart"><h3>Gasto en gasoil por mes (€)</h3>${repSvgBarras(porMes, { color: '#6a8fc0', fmt: v => fmtNum(Math.round(v)) })}</div>` : ''}` : '';
 
   const tarjeta = (label, valor) =>
     `<div class="k"><div class="kl">${label}</div><div class="kv">${valor}</div></div>`;
@@ -2322,12 +2433,17 @@ function generarInformeHTML(modo) {
   .ap { color:#b26a00; font-weight:600; }
   .ac { color:#3a6; }
   .nt { color:#888; font-style:italic; }
+  .chart { margin:16px 0 22px; }
+  .chart h3 { font-size:14px; margin:0 0 8px; color:#333; }
+  .rchart { width:100%; height:auto; display:block; border:1px solid #eee; border-radius:10px; background:#fff; }
+  .muted { color:#999; font-size:13px; }
   .foot { margin-top:30px; color:#999; font-size:12px; border-top:1px solid #eee; padding-top:12px; }
-  @media print { body { padding:0; } }
+  @media print { body { padding:0; } .chart, table { break-inside:avoid; } }
 </style></head><body><div class="wrap">
   <h1>Mantenimiento — ${esc(cur.plate)}</h1>
   <div class="sub">${etiquetaPeriodo(modo).replace(/^./, c => c.toUpperCase())} · generado el ${hoy}</div>
   <div class="kpis">${kpis}</div>
+  ${graficas}
   ${r.reps.length ? `<h2>Repostajes (${r.reps.length})</h2>
   <table><thead><tr><th>Fecha</th><th class="n">Km</th><th class="n">Litros</th><th class="n">€/l</th><th class="n">Importe</th><th class="n">l/100</th><th>Gasolinera</th></tr></thead>
   <tbody>${filasRep}</tbody></table>` : ''}
