@@ -133,6 +133,9 @@
   .row-rep { font-size:13px; color:oklch(0.3 0.01 80); flex:1; }
   .row-del { flex-shrink:0; border:none; background:transparent; color:oklch(0.6 0.02 80);
              font-size:12px; cursor:pointer; padding:2px 4px; }
+  .row-actions { flex-shrink:0; display:flex; flex-direction:column; gap:2px; align-items:flex-end; }
+  .row-edit { border:none; background:transparent; color:oklch(0.5 0.14 230);
+              font-size:12px; font-weight:600; cursor:pointer; padding:2px 4px; }
   .empty { padding:24px 0; font-size:13px; color:oklch(0.6 0.01 80); text-align:center; }
 
   /* ---- repostajes ---- */
@@ -435,8 +438,8 @@
         <div class="mes-lim" id="mesLim"></div>
       </div>
 
-      <div class="card">
-        <div class="card-t" style="margin-bottom:14px;">Registrar repostaje</div>
+      <div class="card" id="fuelFormCard">
+        <div class="card-t" style="margin-bottom:14px;" id="fuelFormTitle">Registrar repostaje</div>
         <div class="form">
           <label class="field">FECHA
             <input type="date" id="gDate">
@@ -493,6 +496,7 @@
           <div id="gFotoPrev"></div>
           <div id="ocrBox" class="ocr-box hide"></div>
           <button class="primary" id="btnAddFuel" style="margin-top:4px;">Añadir repostaje</button>
+          <button class="ghost hide" id="btnCancelFuelEdit" style="margin-top:2px;">Cancelar edición</button>
           <div class="err hide" id="fuelErr"></div>
         </div>
       </div>
@@ -599,7 +603,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.11.0';
+const APP_VERSION = 'v1.12.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -1031,6 +1035,7 @@ let vehicles = loadVehicles();
 let selectedId = vehicles.length ? vehicles[0].id : null;
 let currentKmInputs = {};
 let fotoPendiente = null;   // dataURL de la foto elegida, aún sin guardar
+let editingFuelId = null;   // id del repostaje que se está editando (o null)
 
 // Registro de cambios: se guarda quién borra/añade qué, para poder mirar
 // atrás y para avisar al resto. lastChange dispara el aviso en los demás.
@@ -1428,7 +1433,10 @@ function renderFuel() {
                     : 'revisa los km o los litros'))
             : 'consumo no calculable'}</div>
         </div>
-        <button class="row-del" data-del="${esc(f.id)}">Eliminar</button>
+        <div class="row-actions">
+          <button class="row-edit" data-edit="${esc(f.id)}">Editar</button>
+          <button class="row-del" data-del="${esc(f.id)}">Eliminar</button>
+        </div>
       </div>`;
     }).join('');
 
@@ -1449,6 +1457,9 @@ function renderFuel() {
         logChange('borrar-repostaje', fmtDate(rep.date) + (rep.estacion ? ' · ' + rep.estacion : ''));
         persist(); Sync.push(); render();
       };
+    });
+    $('fuelList').querySelectorAll('[data-edit]').forEach(b => {
+      b.onclick = () => editarRepostaje(b.dataset.edit);
     });
   }
 
@@ -1735,6 +1746,48 @@ $('gFoto').onchange = async e => {
   }
 };
 
+// Vaciar el formulario de repostaje y salir del modo edición.
+function resetFuelForm() {
+  $('gDate').value = ''; $('gKm').value = ''; $('gLitros').value = '';
+  $('gImporte').value = ''; $('gFoto').value = ''; $('gLleno').checked = true;
+  $('gExtra').value = ''; $('gExtraNota').value = '';
+  $('gOtroPago').checked = false; $('gNota').value = ''; $('gEstacion').value = '';
+  fotoPendiente = null; $('gFotoPrev').innerHTML = '';
+  limpiarMarcas();
+  $('ocrBox').classList.add('hide');
+  showErr('fuelErr', '');
+  editingFuelId = null;
+  $('fuelFormTitle').textContent = 'Registrar repostaje';
+  $('btnAddFuel').textContent = 'Añadir repostaje';
+  $('btnCancelFuelEdit').classList.add('hide');
+}
+
+// Cargar un repostaje en el formulario para editarlo.
+function editarRepostaje(id) {
+  const rep = (currentVehicle().fuel || []).find(f => f.id === id);
+  if (!rep) return;
+  editingFuelId = id;
+  $('gDate').value = rep.date || '';
+  $('gKm').value = hasKm(rep) ? rep.km : '';
+  $('gLitros').value = num(rep.litros) != null ? rep.litros : '';
+  $('gImporte').value = num(rep.importe) != null ? rep.importe : '';
+  $('gExtra').value = num(rep.extra) != null ? rep.extra : '';
+  $('gExtraNota').value = rep.extraNota || '';
+  $('gEstacion').value = rep.estacion || '';
+  $('gLleno').checked = rep.lleno !== false;
+  $('gOtroPago').checked = rep.pago === 'otro';
+  $('gNota').value = rep.nota || '';
+  $('gFoto').value = ''; fotoPendiente = null; $('gFotoPrev').innerHTML = '';
+  $('fuelFormTitle').textContent = 'Editar repostaje';
+  $('btnAddFuel').textContent = 'Guardar cambios';
+  $('btnCancelFuelEdit').classList.remove('hide');
+  showErr('fuelErr', '');
+  $('ocrBox').classList.add('hide');
+  $('fuelFormCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+$('btnCancelFuelEdit').onclick = () => resetFuelForm();
+
 $('btnAddFuel').onclick = async () => {
   const date = $('gDate').value;
   const litros = num($('gLitros').value);
@@ -1744,18 +1797,11 @@ $('btnAddFuel').onclick = async () => {
   const cur = currentVehicle();
   if (!cur.id) { showErr('fuelErr', 'Añade primero un vehículo.'); return; }
 
-  const id = 'g' + Date.now();
-  if (fotoPendiente) {
-    try { await Fotos.put(id, fotoPendiente); } catch (e) {}
-    Sync.subirFoto(id, fotoPendiente);   // que la vea el resto (si hay conexión)
-  }
-
-  cur.fuel = cur.fuel || [];
   const estacion = $('gEstacion').value.trim();
   const otroPago = $('gOtroPago').checked;
   const extra = num($('gExtra').value);
-  cur.fuel.push(stamp({
-    id, date,
+  const campos = {
+    date,
     km: normKm($('gKm').value),
     litros, importe,
     extra: extra || null,
@@ -1763,22 +1809,38 @@ $('btnAddFuel').onclick = async () => {
     estacion,
     lleno: $('gLleno').checked,
     pago: otroPago ? 'otro' : 'tarjeta',
-    nota: $('gNota').value.trim(),
-    foto: !!fotoPendiente
-  }));
-  logChange('repostaje', fmtDate(date) + (estacion ? ' · ' + estacion : '')
-    + (otroPago ? ' (pagado aparte)' : ''));
-  persist(); Sync.push();
+    nota: $('gNota').value.trim()
+  };
 
-  $('gDate').value = ''; $('gKm').value = ''; $('gLitros').value = '';
-  $('gImporte').value = ''; $('gFoto').value = ''; $('gLleno').checked = true;
-  $('gExtra').value = ''; $('gExtraNota').value = '';
-  $('gOtroPago').checked = false; $('gNota').value = '';
-  fotoPendiente = null; $('gFotoPrev').innerHTML = '';
-  $('gEstacion').value = '';
-  limpiarMarcas();
-  $('ocrBox').classList.add('hide');
-  showErr('fuelErr', '');
+  cur.fuel = cur.fuel || [];
+
+  if (editingFuelId) {
+    // --- editar uno existente: se conserva id y foto (salvo que pongas otra) ---
+    const rep = cur.fuel.find(f => f.id === editingFuelId);
+    if (rep) {
+      Object.assign(rep, campos);
+      if (fotoPendiente) {
+        try { await Fotos.put(rep.id, fotoPendiente); } catch (e) {}
+        Sync.subirFoto(rep.id, fotoPendiente);
+        rep.foto = true;
+      }
+      stamp(rep);
+      logChange('editar-repostaje', fmtDate(date) + (estacion ? ' · ' + estacion : ''));
+    }
+  } else {
+    // --- nuevo ---
+    const id = 'g' + Date.now();
+    if (fotoPendiente) {
+      try { await Fotos.put(id, fotoPendiente); } catch (e) {}
+      Sync.subirFoto(id, fotoPendiente);
+    }
+    cur.fuel.push(stamp({ id, ...campos, foto: !!fotoPendiente }));
+    logChange('repostaje', fmtDate(date) + (estacion ? ' · ' + estacion : '')
+      + (otroPago ? ' (pagado aparte)' : ''));
+  }
+
+  persist(); Sync.push();
+  resetFuelForm();
   render();
 };
 
@@ -2009,7 +2071,7 @@ const Sync = {
     if (!inicial && lc && lc.at > antesLC && lc.deviceId !== deviceId) {
       const verbo = {
         'revision': 'añadió una revisión', 'repostaje': 'añadió un repostaje',
-        'vehiculo': 'añadió un vehículo',
+        'editar-repostaje': 'editó un repostaje', 'vehiculo': 'añadió un vehículo',
         'vehiculo-renombrar': 'renombró un vehículo', 'vehiculo-borrar': 'borró un vehículo',
         'borrar-revision': 'borró una revisión', 'borrar-repostaje': 'borró un repostaje',
         'restaurar': 'restauró algo'
@@ -2100,9 +2162,10 @@ function renderLog() {
     ? log.map(e => {
         const verbo = {
           'revision': 'añadió una revisión', 'repostaje': 'añadió un repostaje',
-          'vehiculo': 'añadió un vehículo', 'vehiculo-renombrar': 'renombró',
-          'vehiculo-borrar': 'borró un vehículo', 'borrar-revision': 'borró una revisión',
-          'borrar-repostaje': 'borró un repostaje', 'restaurar': 'restauró'
+          'editar-repostaje': 'editó un repostaje', 'vehiculo': 'añadió un vehículo',
+          'vehiculo-renombrar': 'renombró', 'vehiculo-borrar': 'borró un vehículo',
+          'borrar-revision': 'borró una revisión', 'borrar-repostaje': 'borró un repostaje',
+          'restaurar': 'restauró'
         }[e.action] || 'cambió algo';
         return `<div class="log-row"><b>${esc(e.by || 'Alguien')}</b> ${verbo}${e.label ? ': ' + esc(e.label) : ''}
                 <span class="when">— ${fmtCuando(e.at)}</span></div>`;
