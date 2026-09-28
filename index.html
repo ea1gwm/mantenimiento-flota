@@ -176,7 +176,10 @@
                 background:none; border:none; cursor:pointer; line-height:1; }
 
   .charts2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-  .bars { display:flex; align-items:flex-end; gap:6px; height:150px; overflow-x:auto; }
+  /* altura con hueco para la cifra de arriba, la etiqueta de abajo y la barra
+     de scroll horizontal (que roba ~15px). La columna llega a ~159px, así que
+     con 190px no se recorta ninguna cifra aunque aparezca el scroll. */
+  .bars { display:flex; align-items:flex-end; gap:6px; height:190px; overflow-x:auto; padding-top:2px; }
   .bar { display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; width:34px; }
   .bar-v { font-size:10px; color:oklch(0.45 0.01 80); }
   .bar-b { width:18px; background:oklch(0.7 0.1 230); border-radius:3px 3px 0 0; }
@@ -604,7 +607,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.13.0';
+const APP_VERSION = 'v1.13.1';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
