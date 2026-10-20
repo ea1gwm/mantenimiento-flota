@@ -99,6 +99,18 @@
   .oil-rem { font-size:16px; font-weight:700; margin-top:8px; color:oklch(0.3 0.1 230); }
   .oil-rem.late { color:oklch(0.5 0.18 30); }
 
+  /* ---- recordatorios por km (pastillas, correa…) ---- */
+  #recordatorios { display:contents; }
+  .rem { background:oklch(0.95 0.03 230); border:1px solid oklch(0.85 0.05 230); border-radius:14px; padding:16px 20px; }
+  .rem-l { font-size:11px; font-weight:600; color:oklch(0.4 0.08 230); text-transform:uppercase; letter-spacing:0.03em; }
+  .rem-txt { font-size:14px; color:oklch(0.35 0.08 230); margin-top:3px; }
+  .rem-big { font-size:17px; font-weight:700; margin-top:7px; color:oklch(0.3 0.1 230); }
+  .rem-del { border:none; background:transparent; color:oklch(0.55 0.02 80); font-size:12px; cursor:pointer; float:right; padding:0 0 0 8px; }
+  .rem.soon { background:oklch(0.96 0.05 90); border-color:oklch(0.85 0.09 90); }
+  .rem.soon .rem-l, .rem.soon .rem-txt, .rem.soon .rem-big { color:oklch(0.45 0.13 70); }
+  .rem.late { background:oklch(0.96 0.04 30); border-color:oklch(0.88 0.06 30); }
+  .rem.late .rem-l, .rem.late .rem-txt, .rem.late .rem-big { color:oklch(0.5 0.18 30); }
+
   /* ---- gasto del mes ---- */
   .mes { background:oklch(0.95 0.04 150); border:1px solid oklch(0.85 0.06 150);
          border-radius:14px; padding:18px 20px; }
@@ -337,6 +349,21 @@
           <label class="field hide" id="fOilIntervalWrap">VÁLIDO HASTA (KM DE DURACIÓN)
             <input type="number" id="fOilInterval" placeholder="20000" value="20000" min="0">
           </label>
+          <label class="check">
+            <input type="checkbox" id="fReminder">
+            Avisarme dentro de unos km (pastillas, correa…)
+          </label>
+          <div class="form2 hide" id="fReminderWrap">
+            <label class="field">CONCEPTO
+              <input id="fReminderLabel" placeholder="Pastillas traseras">
+            </label>
+            <label class="field">AVISAR A LOS (KM)
+              <input type="number" id="fReminderKm" placeholder="20000" value="20000" min="0">
+            </label>
+          </div>
+          <div class="hint hide" id="fReminderHint" style="font-size:11px; margin-top:-6px;">
+            Se contará desde los km de esta revisión. Cuando falten pocos, te avisa en una tarjeta.
+          </div>
           <button class="primary" id="btnAdd" style="margin-top:4px;">Añadir registro</button>
           <button class="ghost hide" id="btnCancelRevEdit" style="margin-top:2px;">Cancelar edición</button>
           <div class="err hide" id="formErr"></div>
@@ -373,6 +400,8 @@
         </div>
         <div class="oil-rem" id="oilRem"></div>
       </div>
+
+      <div id="recordatorios"></div>
 
       <div class="card" style="padding-bottom:8px;">
         <div class="list-head">
@@ -607,7 +636,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.13.1';
+const APP_VERSION = 'v1.14.0';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -1191,6 +1220,56 @@ function renderOil() {
   $('oilRem').classList.toggle('late', remaining < 0);
 }
 
+/* ---------- recordatorios por km (pastillas, correa…) ----------
+   Cada recordatorio se ancla a la revisión más reciente (por km) que lo
+   lleva. Cuenta desde esos km + el intervalo, y usa como km actuales el
+   último conocido (los repostajes lo mantienen al día). Avisa en ámbar
+   cuando faltan ≤2.000 km y en rojo cuando se pasa. */
+const RECORDATORIO_PRONTO = 2000;
+function renderRecordatorios() {
+  const cont = $('recordatorios');
+  const conRec = sortedRecords().filter(r => r.reminderLabel && r.reminderKm && hasKm(r));
+  // último cambio de cada concepto (por km, el más alto)
+  const porConcepto = new Map();
+  conRec.forEach(r => {
+    const k = r.reminderLabel.trim().toLowerCase();
+    const prev = porConcepto.get(k);
+    if (!prev || r.km > prev.km) porConcepto.set(k, r);
+  });
+  if (!porConcepto.size) { cont.innerHTML = ''; return; }
+
+  const pts = puntosKm();
+  const currentKm = pts.length ? pts[pts.length - 1].km : null;
+
+  cont.innerHTML = [...porConcepto.values()]
+    .sort((a, b) => (a.km + a.reminderKm) - (b.km + b.reminderKm))
+    .map(r => {
+      const dueKm = r.km + r.reminderKm;
+      const restante = currentKm != null ? dueKm - currentKm : r.reminderKm;
+      const estado = restante < 0 ? 'late' : (restante <= RECORDATORIO_PRONTO ? 'soon' : '');
+      const big = restante < 0
+        ? '¡Toca! Pasado por ' + fmtNum(-restante) + ' km'
+        : 'Faltan ' + fmtNum(restante) + ' km';
+      return `<div class="rem ${estado}">
+        <button class="rem-del" data-remid="${esc(r.id)}" title="Quitar este aviso">quitar aviso</button>
+        <div class="rem-l">${esc(r.reminderLabel)}</div>
+        <div class="rem-txt">Toca a los <strong>${fmtNum(dueKm)} km</strong> · cambiadas a ${fmtNum(r.km)} km (cada ${fmtNum(r.reminderKm)} km)${currentKm != null ? ' · ahora ' + fmtNum(currentKm) + ' km' : ''}</div>
+        <div class="rem-big">${big}</div>
+      </div>`;
+    }).join('');
+
+  cont.querySelectorAll('[data-remid]').forEach(b => {
+    b.onclick = () => {
+      const rec = currentVehicle().records.find(r => r.id === b.dataset.remid);
+      if (!rec) return;
+      if (!confirm('¿Quitar el aviso de «' + rec.reminderLabel + '»? La revisión se conserva.')) return;
+      rec.reminderLabel = null; rec.reminderKm = null; stamp(rec);
+      logChange('editar-revision', 'quitado aviso · ' + fmtDate(rec.date));
+      persist(); Sync.push(); render();
+    };
+  });
+}
+
 /* ---------- historial de revisiones ---------- */
 // Filtro por mes de las listas, para no verlas todas seguidas. El selector
 // se rellena con los meses que tienen datos; la selección se conserva entre
@@ -1601,6 +1680,7 @@ function render() {
   renderTabs();
   renderKpis();
   renderOil();
+  renderRecordatorios();
   renderHist();
   renderCharts();
   renderFuel();
@@ -1631,11 +1711,17 @@ function showErr(id, msg) {
 }
 
 $('fOil').onchange = () => $('fOilIntervalWrap').classList.toggle('hide', !$('fOil').checked);
+$('fReminder').onchange = () => {
+  $('fReminderWrap').classList.toggle('hide', !$('fReminder').checked);
+  $('fReminderHint').classList.toggle('hide', !$('fReminder').checked);
+};
 
 function resetRevForm() {
   $('fDate').value = ''; $('fTaller').value = ''; $('fKm').value = ''; $('fRep').value = '';
   $('fOil').checked = false; $('fOilInterval').value = '20000';
   $('fOilIntervalWrap').classList.add('hide');
+  $('fReminder').checked = false; $('fReminderLabel').value = ''; $('fReminderKm').value = '20000';
+  $('fReminderWrap').classList.add('hide'); $('fReminderHint').classList.add('hide');
   showErr('formErr', '');
   editingRevId = null;
   $('revFormTitle').textContent = 'Registrar revisión';
@@ -1654,6 +1740,12 @@ function editarRevision(id) {
   $('fOil').checked = !!rec.oilIntervalKm;
   $('fOilInterval').value = rec.oilIntervalKm || 20000;
   $('fOilIntervalWrap').classList.toggle('hide', !rec.oilIntervalKm);
+  const tieneRec = !!(rec.reminderLabel && rec.reminderKm);
+  $('fReminder').checked = tieneRec;
+  $('fReminderLabel').value = rec.reminderLabel || '';
+  $('fReminderKm').value = rec.reminderKm || 20000;
+  $('fReminderWrap').classList.toggle('hide', !tieneRec);
+  $('fReminderHint').classList.toggle('hide', !tieneRec);
   $('revFormTitle').textContent = 'Editar revisión';
   $('btnAdd').textContent = 'Guardar cambios';
   $('btnCancelRevEdit').classList.remove('hide');
@@ -1669,11 +1761,14 @@ $('btnAdd').onclick = () => {
   if (!date || !taller) { showErr('formErr', 'Introduce al menos fecha y taller.'); return; }
   const cur = currentVehicle();
   if (!cur.id) { showErr('formErr', 'Añade primero un vehículo.'); return; }
+  const recOn = $('fReminder').checked && $('fReminderLabel').value.trim();
   const campos = {
     date, taller,
     km: normKm($('fKm').value),
     reparacion: $('fRep').value.trim(),
-    oilIntervalKm: $('fOil').checked ? (parseInt($('fOilInterval').value, 10) || 20000) : null
+    oilIntervalKm: $('fOil').checked ? (parseInt($('fOilInterval').value, 10) || 20000) : null,
+    reminderLabel: recOn ? $('fReminderLabel').value.trim() : null,
+    reminderKm: recOn ? (parseInt($('fReminderKm').value, 10) || 20000) : null
   };
   if (editingRevId) {
     const rec = cur.records.find(r => r.id === editingRevId);
