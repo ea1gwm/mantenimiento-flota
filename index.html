@@ -636,7 +636,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v1.14.0';
+const APP_VERSION = 'v1.14.1';
 const STORAGE_KEY = 'mantenimiento_flota_app';
 const META_KEY    = 'mantenimiento_flota_meta';   // registro de cambios
 const CODE_KEY    = 'flota_sync_code';
@@ -1435,6 +1435,10 @@ function calcConsumos() {
     if (anclaKm !== null && l) litrosAcum += l;
 
     if (f.lleno && hasKm(f)) {
+      // Km hacia atrás (o igual) = dato poco fiable: no anclamos aquí; los
+      // litros ya sumados se arrastran al siguiente lleno con km coherente,
+      // para no descuadrar su consumo (sería un falso "faltan repostajes").
+      if (anclaKm !== null && f.km <= anclaKm) return;
       if (anclaKm !== null && f.km > anclaKm && litrosAcum > 0) {
         const dist = f.km - anclaKm;
         const l100 = litrosAcum / dist * 100;
@@ -1486,6 +1490,12 @@ function renderFuel() {
     ? fmtDec(medio * (gastoFuel / litrosTot), 2) + ' €' : '—';
 
   /* --- listado (filtrable por mes; los KPIs de arriba son de todo) --- */
+  // km que van hacia atrás (menores que el repostaje anterior con km): casi
+  // siempre un km mal leído/tecleado. Se marca para que se corrija.
+  const kmAtras = new Map();
+  let prevKm = null;
+  fuel.forEach(f => { if (hasKm(f)) { if (prevKm !== null && f.km < prevKm) kmAtras.set(f.id, prevKm); prevKm = f.km; } });
+
   fuelFilterVal = llenarFiltro('fuelFilter', fuel, fuelFilterVal);
   const rows = aplicaFiltro(fuel, fuelFilterVal).reverse();
   if (!rows.length) {
@@ -1515,11 +1525,12 @@ function renderFuel() {
           <div class="fuel-sub">${partes.join(' · ')}</div>
           ${num(f.extra) ? '<div class="fuel-extra">+ ' + esc(f.extraNota || 'Extra') + ' ' + fmtDec(num(f.extra), 2) + ' € <span style="opacity:.7">(total tarjeta ' + fmtDec((imp || 0) + num(f.extra), 2) + ' €)</span></div>' : ''}
           ${f.nota ? '<div class="fuel-nota">' + esc(f.nota) + '</div>' : ''}
+          ${kmAtras.has(f.id) ? '<div class="fuel-cons warn">⚠ los km (' + fmtNum(f.km) + ') son menores que el repostaje anterior (' + fmtNum(kmAtras.get(f.id)) + ' km) — revísalos</div>' : ''}
           <div class="fuel-cons${c ? (c.ok ? '' : ' warn') : ' na'}">${c
             ? (c.ok
                 ? fmtDec(c.l100, 2) + ' l/100 km'
                 : fmtDec(c.l100, 2) + ' l/100 km · ' + (c.l100 < CONSUMO_MIN
-                    ? 'faltan repostajes por registrar entre este y el anterior'
+                    ? 'faltan repostajes por registrar, o un km mal en un repostaje cercano'
                     : 'revisa los km o los litros'))
             : 'consumo no calculable'}</div>
         </div>
